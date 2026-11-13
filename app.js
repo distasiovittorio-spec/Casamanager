@@ -5,7 +5,7 @@
 /* =================== Dati =================== */
 
 const CHIAVE = 'casamanager.dati.v1';
-const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'spese', 'rate', 'tasse', 'riunioni', 'letture'];
+const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'spese', 'rate', 'tasse', 'riunioni', 'letture'];
 
 function vuoto() {
   const d = { versione: 1 };
@@ -139,7 +139,7 @@ const speseRate = spesaId => db.rate.filter(r => r.spesaId === spesaId).sort((a,
 
 function eliminaImmobile(id) {
   db.immobili = db.immobili.filter(x => x.id !== id);
-  ['affittuari', 'affitti', 'condomini', 'tasse', 'riunioni', 'letture'].forEach(t => {
+  ['affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'tasse', 'riunioni', 'letture'].forEach(t => {
     db[t] = db[t].filter(x => x.immobileId !== id);
   });
   const spese = db.spese.filter(s => s.immobileId === id).map(s => s.id);
@@ -216,6 +216,14 @@ function vociRegistro() {
     voci.push({ k: 'condominio', id: q.id, entrata: true, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
       titolo: `Condominio ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
   }
+  for (const q of db.affittiVersati) {
+    voci.push({ k: 'affittoVersato', id: q.id, entrata: false, data: q.data, importo: q.importo, icona: '🏠', categoria: 'Affitto versato',
+      titolo: `Affitto versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
+  }
+  for (const q of db.condominiVersati) {
+    voci.push({ k: 'condominioVersato', id: q.id, entrata: false, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio versato',
+      titolo: `Condominio versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
+  }
   for (const s of db.spese) {
     const rate = speseRate(s.id);
     const pagate = rate.filter(r => r.pagata).length;
@@ -245,6 +253,8 @@ function movimentiEffettivi() {
   const m = [];
   db.affitti.forEach(a => m.push({ data: a.data, importo: a.importo, cat: 'affitti', immobileId: a.immobileId }));
   db.condomini.forEach(q => m.push({ data: q.data, importo: q.importo, cat: 'condominio', immobileId: q.immobileId }));
+  db.affittiVersati.forEach(q => m.push({ data: q.data, importo: q.importo, cat: 'affittoVersato', immobileId: q.immobileId }));
+  db.condominiVersati.forEach(q => m.push({ data: q.data, importo: q.importo, cat: 'condominioVersato', immobileId: q.immobileId }));
   db.rate.filter(r => r.pagata).forEach(r => {
     const s = db.spese.find(x => x.id === r.spesaId);
     m.push({ data: r.dataPagamento || r.scadenza, importo: r.importo, cat: 'spese', immobileId: s ? s.immobileId : '' });
@@ -444,6 +454,33 @@ function moduloAffitto(esistente) {
     },
     elimina: esistente ? () => { db.affitti = db.affitti.filter(x => x.id !== esistente.id); salva(); } : null,
     conferma: 'Eliminare questo affitto dal registro?'
+  });
+}
+
+function moduloVersamento(tipo, esistente) {
+  const affitto = tipo === 'affitto';
+  const tabella = affitto ? 'affittiVersati' : 'condominiVersati';
+  apriModulo({
+    titolo: esistente ? (affitto ? 'Modifica affitto versato' : 'Modifica quota condominio versata') : (affitto ? 'Affitto versato' : 'Quota condominio versata'),
+    valori: {
+      immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
+      mese: esistente ? esistente.mese : meseCorrente(),
+      data: esistente ? esistente.data : oggi(),
+      importo: esistente ? testoImporto(esistente.importo) : '', id: esistente && esistente.id
+    },
+    campi: [
+      { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
+      { n: 'mese', l: 'Mese di competenza', t: 'mese' },
+      { n: 'data', l: 'Data pagamento', t: 'data' },
+      { n: 'importo', l: 'Importo', t: 'importo' }
+    ],
+    valido: v => v.immobileId && v.mese && v.data && (leggiImporto(v.importo) || 0) > 0,
+    salva: v => {
+      const dati = { immobileId: v.immobileId, mese: v.mese, data: v.data, importo: leggiImporto(v.importo) };
+      if (esistente) Object.assign(esistente, dati); else db[tabella].push(Object.assign({ id: nuovoId() }, dati));
+    },
+    elimina: esistente ? () => { db[tabella] = db[tabella].filter(x => x.id !== esistente.id); salva(); } : null,
+    conferma: 'Eliminare questo pagamento dal registro?'
   });
 }
 
@@ -716,6 +753,8 @@ function vistaScadenze() {
 function apriVoceRegistro(v) {
   if (v.k === 'affitto') moduloAffitto(db.affitti.find(x => x.id === v.id));
   else if (v.k === 'condominio') moduloCondominio(db.condomini.find(x => x.id === v.id));
+  else if (v.k === 'affittoVersato') moduloVersamento('affitto', db.affittiVersati.find(x => x.id === v.id));
+  else if (v.k === 'condominioVersato') moduloVersamento('condominio', db.condominiVersati.find(x => x.id === v.id));
   else if (v.k === 'spesa') dettaglioSpesa(v.id);
   else moduloTassa(db.tasse.find(x => x.id === v.id));
 }
@@ -763,14 +802,17 @@ function vistaRegistro() {
 }
 
 function menuRegistra() {
-  const scelte = [['🏠', 'Affitto ricevuto', moduloAffitto], ['🏢', 'Quota condominio ricevuta', moduloCondominio],
+  const scelte = [['🏠', 'Affitto ricevuto', () => moduloAffitto()], ['🏢', 'Quota condominio ricevuta', () => moduloCondominio()],
+    ['🏠', 'Affitto versato', () => moduloVersamento('affitto')], ['🏢', 'Quota condominio versata', () => moduloVersamento('condominio')],
     ['🔨', 'Spesa straordinaria', moduloSpesa], ['🏛️', 'Tassa', moduloTassa]];
   const corpo = h('div', { class: 'gruppo' }, scelte.map(([i, t, f]) =>
     h('button', { class: 'scelta-voce', onclick: () => { velo.chiudi(); f(); } }, h('span', {}, i), t)));
   const velo = apriFoglio('Registra', corpo, { sinistra: 'Chiudi' });
 }
 
-const CATEGORIE = { affitti: 'Affitti', condominio: 'Quote condominio', spese: 'Spese straordinarie', tasse: 'Tasse' };
+const CATEGORIE = { affitti: 'Affitti ricevuti', condominio: 'Quote condominio ricevute', affittoVersato: 'Affitto versato', condominioVersato: 'Quote condominio versate', spese: 'Spese straordinarie', tasse: 'Tasse' };
+const CAT_ENTRATE = ['affitti', 'condominio'];
+const CAT_USCITE = ['affittoVersato', 'condominioVersato', 'spese', 'tasse'];
 
 function grafico(punti) {
   const W = 360, H = 170, base = H - 6, alto = 14;
@@ -799,12 +841,12 @@ function vistaBilancio() {
   const mov = tutti.filter(m => Number(m.data.slice(0, 4)) === stato.anno && (!stato.immBilancio || m.immobileId === stato.immBilancio));
   const somma = cat => mov.filter(m => m.cat === cat).reduce((t, m) => t + m.importo, 0);
   const entrate = somma('affitti') + somma('condominio');
-  const uscite = somma('spese') + somma('tasse');
+  const uscite = CAT_USCITE.reduce((t, c) => t + somma(c), 0);
   const saldo = entrate - uscite;
   const punti = Array.from({ length: 12 }, (_, i) => {
     const delMese = mov.filter(m => Number(m.data.slice(5, 7)) === i + 1);
-    return { e: delMese.filter(m => m.cat === 'affitti' || m.cat === 'condominio').reduce((t, m) => t + m.importo, 0),
-      u: delMese.filter(m => m.cat === 'spese' || m.cat === 'tasse').reduce((t, m) => t + m.importo, 0) };
+    return { e: delMese.filter(m => CAT_ENTRATE.includes(m.cat)).reduce((t, m) => t + m.importo, 0),
+      u: delMese.filter(m => CAT_USCITE.includes(m.cat)).reduce((t, m) => t + m.importo, 0) };
   });
 
   const selAnno = h('select', { 'aria-label': 'Anno', onchange: e => { stato.anno = Number(e.target.value); render(); } },
@@ -825,8 +867,8 @@ function vistaBilancio() {
     mov.length ? h('div', { class: 'sezione' }, h('h2', {}, 'Andamento mensile'),
       h('div', { class: 'grafico' }, grafico(punti),
         h('div', { class: 'leg' }, h('span', {}, h('i', { style: 'background:var(--verde)' }), 'Entrate'), h('span', {}, h('i', { style: 'background:var(--rosso)' }), 'Uscite')))) : null,
-    h('div', { class: 'sezione' }, h('h2', {}, 'Entrate per categoria'), righe(['affitti', 'condominio'])),
-    h('div', { class: 'sezione' }, h('h2', {}, 'Costi per categoria'), righe(['spese', 'tasse'])),
+    h('div', { class: 'sezione' }, h('h2', {}, 'Entrate per categoria'), righe(CAT_ENTRATE)),
+    h('div', { class: 'sezione' }, h('h2', {}, 'Costi per categoria'), righe(CAT_USCITE)),
     h('p', { class: 'nota' }, 'Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata). Affitti e quote condominio contano alla data di incasso.'));
   return { titolo: 'Bilancio', azioni: [], nodo };
 }

@@ -1,5 +1,5 @@
 // Service worker: l'app funziona anche senza connessione.
-const CACHE = 'casamanager-v1';
+const CACHE = 'casamanager-v2';
 const FILE = ['./', './index.html', './style.css', './app.js', './manifest.webmanifest',
   './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 

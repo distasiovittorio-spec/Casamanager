@@ -96,8 +96,8 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12
 .cerca:focus { outline: 2px solid var(--accento); }
 
 /* ---------- Bilancio ---------- */
-.scelte { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-.scelte select { width: 100%; padding: 10px; border-radius: 10px; border: 0; background: var(--card); box-shadow: var(--ombra); }
+.scelte { display: grid; grid-template-columns: 1fr; gap: 8px; }
+.scelte select { width: 100%; min-width: 0; padding: 12px 10px; border-radius: 10px; border: 0; background: var(--card); box-shadow: var(--ombra); font-size: 16px; text-overflow: ellipsis; }
 .totali { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .totale { background: var(--card); border-radius: 14px; padding: 12px 14px; box-shadow: var(--ombra); }
 .totale small { color: var(--sub); display: block; }

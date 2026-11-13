@@ -37,11 +37,11 @@ PRIVACY
 
 FUNZIONI
 - Immobili: elenco, affittuari con inizio/fine contratto, riunioni di condominio con note.
-- Registro: affitti e quote condominio ricevuti, spese straordinarie (anche a rate), tasse. Con ricerca e filtro Entrate/Uscite.
+- Registro: affitti e quote condominio ricevuti e versati, spese straordinarie (anche a rate), tasse. Con ricerca e filtro Entrate/Uscite.
 - Scadenze: letture gas e acqua (ripetute ogni N mesi), tasse e rate da pagare.
 - Bilancio: entrate e costi per anno e per immobile, con grafico mensile.
   Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata).
-  Affitti e quote condominio contano alla data di incasso.
+  Affitti e quote condominio (ricevuti o versati) contano alla data di incasso/pagamento.
 
 PROVA SUL COMPUTER (facoltativa)
    In questa cartella:  python3 -m http.server 8000   poi apri http://localhost:8000
