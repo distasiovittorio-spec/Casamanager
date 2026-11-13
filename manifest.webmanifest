@@ -1,0 +1,15 @@
+{
+  "name": "CasaManager",
+  "short_name": "CasaManager",
+  "description": "Gestione economica dei tuoi immobili in affitto",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#14857f",
+  "theme_color": "#14857f",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

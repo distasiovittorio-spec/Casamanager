@@ -1,0 +1,47 @@
+CASAMANAGER (app web per iPhone) - gestione economica dei tuoi immobili
+=======================================================================
+
+Nessun abbonamento Apple, nessuna scadenza dopo 7 giorni, nessun Mac necessario.
+E' un'app web (HTML/JavaScript) che si aggiunge alla schermata Home dell'iPhone e funziona anche offline.
+
+PRIVACY
+- I dati restano SOLO nel browser del tuo iPhone. Il sito che ospita l'app contiene solo il codice, mai i tuoi dati.
+- Nessun account, nessun server, nessuna analisi. Non passano da Claude ne' da Anthropic.
+
+1) PUBBLICARE L'APP (una volta sola, gratis, circa 5 minuti)
+   Serve un indirizzo https: senza, l'iPhone non permette di installarla.
+   Opzione consigliata: GitHub Pages
+   a. Crea un account gratuito su github.com (se non l'hai).
+   b. "New repository": nome "casamanager", visibilita' Public, Create.
+   c. "uploading an existing file": trascina TUTTI i file di questa cartella (anche la cartella "icons"), poi "Commit changes".
+      (il codice e' visibile a tutti, i tuoi dati no: non sono mai caricati)
+   d. Settings > Pages > Branch: main, cartella /(root) > Save.
+   e. Dopo circa un minuto l'app e' su  https://IL-TUO-NOME.github.io/casamanager/
+   Alternativa: Cloudflare Pages o Netlify (Drop), anch'essi gratuiti.
+
+2) INSTALLARE SULL'IPHONE
+   a. Apri l'indirizzo in SAFARI.
+   b. Tocca Condividi (quadrato con la freccia) > "Aggiungi alla schermata Home" > Aggiungi.
+   c. Apri sempre l'app dall'icona sulla Home, mai da Safari: i dati sono legati a quell'indirizzo.
+      Non cambiare l'indirizzo del sito dopo aver inserito i dati.
+
+3) COPIA DEI DATI (importante)
+   Immobili > "Salva una copia dei dati" crea un file: salvalo in File / iCloud Drive.
+   "Ripristina da una copia" lo rimette dopo un cambio di telefono o un problema.
+
+4) AVVISI SULLE SCADENZE
+   Scadenze > "Aggiungi gli avvisi al Calendario": si apre il Calendario con gli eventi (avviso 3 giorni prima e il
+   giorno stesso alle 9:00). Rifallo quando aggiungi nuove scadenze: non crea duplicati.
+   Gli eventi gia' passati o pagati restano nel Calendario: eliminali a mano se non servono.
+   (Gli avvisi arrivano dal Calendario perche' le notifiche push da app web richiedono un server esterno.)
+
+FUNZIONI
+- Immobili: elenco, affittuari con inizio/fine contratto, riunioni di condominio con note.
+- Registro: affitti e quote condominio ricevuti, spese straordinarie (anche a rate), tasse. Con ricerca e filtro Entrate/Uscite.
+- Scadenze: letture gas e acqua (ripetute ogni N mesi), tasse e rate da pagare.
+- Bilancio: entrate e costi per anno e per immobile, con grafico mensile.
+  Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata).
+  Affitti e quote condominio contano alla data di incasso.
+
+PROVA SUL COMPUTER (facoltativa)
+   In questa cartella:  python3 -m http.server 8000   poi apri http://localhost:8000
