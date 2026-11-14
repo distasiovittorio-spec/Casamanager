@@ -37,9 +37,11 @@ PRIVACY
 
 FUNZIONI
 - Immobili: elenco, affittuari con inizio/fine contratto, riunioni di condominio con note.
-- Registro: affitti e quote condominio ricevuti e versati, spese straordinarie (anche a rate), tasse. Con ricerca e filtro Entrate/Uscite.
-- Scadenze: letture gas e acqua (ripetute ogni N mesi), tasse e rate da pagare.
-- Bilancio: entrate e costi per anno e per immobile, con grafico mensile.
+- Registro: affitti e quote condominio ricevuti e versati, depositi cauzionali versati e incassati, spese straordinarie (anche a rate), tasse. Con ricerca e filtro Entrate/Uscite.
+- Scadenze: promemoria ripetuti ogni N mesi (lettura gas, lettura acqua, pagare affitto), tasse e rate da pagare.
+  Le tasse usano causali standard modificabili (Immobili > Causali delle tasse): scegli "Prima rata IMU", aggiungi l'anno e compare "Prima rata IMU 2026".
+- Bilancio: entrate e costi per anno e per uno, piu' o tutti gli immobili, con grafico mensile.
+  I depositi cauzionali sono tracciati a parte e NON entrano in entrate, costi e saldo.
   Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata).
   Affitti e quote condominio (ricevuti o versati) contano alla data di incasso/pagamento.
 

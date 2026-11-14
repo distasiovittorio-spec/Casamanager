@@ -5,11 +5,14 @@
 /* =================== Dati =================== */
 
 const CHIAVE = 'casamanager.dati.v1';
-const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'spese', 'rate', 'tasse', 'riunioni', 'letture'];
+const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'spese', 'rate', 'tasse', 'causali', 'riunioni', 'letture'];
+const CAUSALI_BASE = ['Prima rata IMU', 'Seconda rata IMU', 'Saldo IMU', 'TARI', 'Imposta di registro', 'Cedolare secca'];
+const nuovoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 function vuoto() {
   const d = { versione: 1 };
   TABELLE.forEach(t => { d[t] = []; });
+  d.causali = CAUSALI_BASE.map((testo, i) => ({ id: 'base' + i, testo }));
   return d;
 }
 
@@ -34,8 +37,6 @@ function salva() {
     avviso('Impossibile salvare: il browser ha bloccato l\'archivio dei dati.');
   }
 }
-
-const nuovoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 /* =================== Utilità =================== */
 
@@ -139,7 +140,7 @@ const speseRate = spesaId => db.rate.filter(r => r.spesaId === spesaId).sort((a,
 
 function eliminaImmobile(id) {
   db.immobili = db.immobili.filter(x => x.id !== id);
-  ['affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'tasse', 'riunioni', 'letture'].forEach(t => {
+  ['affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'tasse', 'riunioni', 'letture'].forEach(t => {
     db[t] = db[t].filter(x => x.immobileId !== id);
   });
   const spese = db.spese.filter(s => s.immobileId === id).map(s => s.id);
@@ -157,10 +158,18 @@ function eliminaSpesa(id) {
 function eliminaAffittuario(id) {
   db.affittuari = db.affittuari.filter(a => a.id !== id);
   db.affitti.forEach(q => { if (q.affittuarioId === id) q.affittuarioId = ''; });
+  db.depositi.forEach(q => { if (q.affittuarioId === id) q.affittuarioId = ''; });
   salva();
 }
 
 /* ----- Scadenziario ----- */
+
+const PROMEMORIA = {
+  Gas: { titolo: 'Lettura gas', icona: '🔥', fatto: 'Fatta' },
+  Acqua: { titolo: 'Lettura acqua', icona: '💧', fatto: 'Fatta' },
+  Affitto: { titolo: 'Pagare affitto', icona: '🏠', fatto: 'Pagato' }
+};
+
 
 function vociScadenze() {
   const voci = [];
@@ -179,8 +188,9 @@ function vociScadenze() {
       immobile: nomeImmobile(t.immobileId), importo: t.importo });
   }
   for (const l of db.letture) {
-    voci.push({ tipo: 'lettura', id: l.id, data: l.prossima, icona: l.contatore === 'Gas' ? '🔥' : '💧',
-      titolo: `Lettura ${l.contatore.toLowerCase()}`, immobile: nomeImmobile(l.immobileId), importo: null, ogniMesi: l.ogniMesi });
+    const p = PROMEMORIA[l.contatore] || PROMEMORIA.Gas;
+    voci.push({ tipo: 'lettura', id: l.id, data: l.prossima, icona: p.icona, fatto: p.fatto,
+      titolo: p.titolo, immobile: nomeImmobile(l.immobileId), importo: null, ogniMesi: l.ogniMesi });
   }
   return voci.sort((a, b) => a.data.localeCompare(b.data));
 }
@@ -224,6 +234,13 @@ function vociRegistro() {
     voci.push({ k: 'condominioVersato', id: q.id, entrata: false, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio versato',
       titolo: `Condominio versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
   }
+  for (const d of db.depositi) {
+    const inq = db.affittuari.find(x => x.id === d.affittuarioId);
+    const versato = d.tipo === 'versato';
+    voci.push({ k: 'deposito', id: d.id, deposito: true, entrata: false, data: d.data, importo: d.importo, icona: '🔑', categoria: 'Deposito cauzionale',
+      titolo: versato ? 'Deposito cauzionale versato' : 'Deposito cauzionale incassato',
+      dettaglio: [nomeImmobile(d.immobileId), inq ? inq.nome : ''].filter(Boolean).join(' · '), stato: ['Non incluso nel bilancio', 'blu'] });
+  }
   for (const s of db.spese) {
     const rate = speseRate(s.id);
     const pagate = rate.filter(r => r.pagata).length;
@@ -243,7 +260,7 @@ function vociRegistro() {
 }
 
 function testoRicerca(v) {
-  return semplifica([v.titolo, v.dettaglio, v.categoria, v.entrata ? 'entrata' : 'uscita',
+  return semplifica([v.titolo, v.dettaglio, v.categoria, v.deposito ? 'deposito cauzione cauzionale' : v.entrata ? 'entrata' : 'uscita',
     eur(v.importo), testoImporto(v.importo), v.importo.toFixed(0), fmtMese(v.data.slice(0, 7)), fmtGiorno(v.data)].join(' '));
 }
 
@@ -265,7 +282,7 @@ function movimentiEffettivi() {
 
 /* =================== Interfaccia: strumenti =================== */
 
-const stato = { scheda: 'scadenze', filtro: 'tutti', ricerca: '', anno: new Date().getFullYear(), immBilancio: '', dettaglio: null };
+const stato = { scheda: 'scadenze', filtro: 'tutti', ricerca: '', anno: new Date().getFullYear(), immBilancio: [], dettaglio: null };
 
 function vuotoMsg(titolo, testo, azione) {
   return h('div', { class: 'vuoto' }, h('h3', {}, titolo), h('p', {}, testo),
@@ -313,7 +330,7 @@ function apriModulo(cfg) {
 
     if (f.t === 'testo' || f.t === 'importo') {
       controllo = h('input', { id, type: 'text', value: v[f.n] || '', placeholder: f.ph || (f.t === 'importo' ? '0,00' : ''),
-        inputmode: f.t === 'importo' ? 'decimal' : null, autocomplete: 'off', autocapitalize: f.t === 'testo' ? 'sentences' : null,
+        inputmode: f.t === 'importo' ? 'decimal' : (f.inputmode || null), autocomplete: 'off', autocapitalize: f.t === 'testo' ? 'sentences' : null,
         oninput: e => imposta(e.target.value) });
     } else if (f.t === 'data' || f.t === 'mese' || f.t === 'dataora') {
       const tipo = { data: 'date', mese: 'month', dataora: 'datetime-local' }[f.t];
@@ -339,9 +356,9 @@ function apriModulo(cfg) {
       controllo = h('div', { class: 'contatore' }, h('button', { type: 'button', onclick: cambia(-1), 'aria-label': 'Meno' }, '−'), uscita,
         h('button', { type: 'button', onclick: cambia(1), 'aria-label': 'Più' }, '+'));
     } else if (f.t === 'segmenti') {
-      const bottoni = f.opts.map(o => h('button', { type: 'button', onclick: () => imposta(o) }, o));
-      controllo = h('div', { class: 'segmenti', style: 'flex:1;max-width:220px' }, bottoni);
-      aggiornaRiga = () => bottoni.forEach(b => b.classList.toggle('attivo', b.textContent === v[f.n]));
+      const bottoni = f.opts.map(o => h('button', { type: 'button', onclick: () => imposta(o), 'data-v': o }, (f.etichette && f.etichette[o]) || o));
+      controllo = h('div', { class: 'segmenti', style: 'flex:1;max-width:300px' }, bottoni);
+      aggiornaRiga = () => bottoni.forEach(b => b.classList.toggle('attivo', b.dataset.v === v[f.n]));
     }
 
     const testoEtichetta = () => { etichetta.textContent = typeof f.l === 'function' ? f.l(v) : f.l; };
@@ -484,6 +501,32 @@ function moduloVersamento(tipo, esistente) {
   });
 }
 
+function moduloDeposito(tipo, esistente) {
+  const incassato = tipo === 'incassato';
+  apriModulo({
+    titolo: esistente ? 'Modifica deposito cauzionale' : (incassato ? 'Deposito cauzionale incassato' : 'Deposito cauzionale versato'),
+    valori: {
+      immobileId: esistente ? esistente.immobileId : immobilePredefinito(), affittuarioId: esistente ? esistente.affittuarioId : '',
+      data: esistente ? esistente.data : oggi(), importo: esistente ? testoImporto(esistente.importo) : '', id: esistente && esistente.id
+    },
+    campi: [
+      { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
+      { n: 'affittuarioId', l: 'Affittuario', t: 'scelta', vuoto: 'Nessuno', show: () => incassato,
+        opts: v => db.affittuari.filter(a => a.immobileId === v.immobileId).map(a => ({ v: a.id, l: a.nome })) },
+      { n: 'data', l: incassato ? 'Data incasso' : 'Data versamento', t: 'data' },
+      { n: 'importo', l: 'Importo', t: 'importo' }
+    ],
+    info: () => 'Viene registrato ma non conteggiato in entrate, costi e saldo del bilancio: ' + (incassato ? 'andrà restituito o trattenuto a fine contratto.' : 'ti sarà restituito a fine contratto.'),
+    valido: v => v.immobileId && v.data && (leggiImporto(v.importo) || 0) > 0,
+    salva: v => {
+      const dati = { tipo: esistente ? esistente.tipo : tipo, immobileId: v.immobileId, affittuarioId: incassato ? v.affittuarioId : '', data: v.data, importo: leggiImporto(v.importo) };
+      if (esistente) Object.assign(esistente, dati); else db.depositi.push(Object.assign({ id: nuovoId() }, dati));
+    },
+    elimina: esistente ? () => { db.depositi = db.depositi.filter(x => x.id !== esistente.id); salva(); } : null,
+    conferma: 'Eliminare questo deposito dal registro?'
+  });
+}
+
 function moduloCondominio(esistente) {
   apriModulo({
     titolo: esistente ? 'Modifica quota condominio' : 'Quota condominio ricevuta',
@@ -583,26 +626,46 @@ function dettaglioSpesa(id) {
   disegna();
 }
 
+const ALTRO = '__altro';
+const causaliOrdinate = () => db.causali.slice().sort((a, b) => a.testo.localeCompare(b.testo, 'it'));
+
 function moduloTassa(esistente) {
+  let causale = '', altro = '', anno = String(new Date().getFullYear());
+  if (esistente) {
+    if (esistente.causale) { causale = esistente.causale; anno = esistente.anno || ''; }
+    else { causale = ALTRO; altro = esistente.altro !== undefined ? esistente.altro : esistente.descrizione; anno = esistente.anno || ''; }
+  }
+  const base = v => (v.causale === ALTRO ? v.altro.trim() : v.causale);
+  const annoValido = v => /^\d{4}$/.test(v.anno.trim());
+  const descrizione = v => [base(v), v.anno.trim()].filter(Boolean).join(' ');
   apriModulo({
     titolo: esistente ? 'Modifica tassa' : 'Tassa',
     valori: {
-      descrizione: esistente ? esistente.descrizione : '', immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
+      causale, altro, anno, immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
       importo: esistente ? testoImporto(esistente.importo) : '', scadenza: esistente ? esistente.scadenza : oggi(),
       pagata: esistente ? esistente.pagata : false, dataPagamento: esistente && esistente.dataPagamento ? esistente.dataPagamento : oggi(),
       id: esistente && esistente.id
     },
     campi: [
-      { n: 'descrizione', l: 'Tipo di tassa', t: 'testo', ph: 'es. IMU, TARI' },
+      { n: 'causale', l: 'Causale', t: 'scelta', vuoto: 'Seleziona…', opts: () => {
+        const elenco = causaliOrdinate().map(c => ({ v: c.testo, l: c.testo }));
+        if (causale && causale !== ALTRO && !elenco.some(o => o.v === causale)) elenco.push({ v: causale, l: causale });
+        return [...elenco, { v: ALTRO, l: 'Altra descrizione…' }];
+      } },
+      { n: 'altro', l: 'Descrizione', t: 'testo', ph: 'es. Tassa rifiuti', show: v => v.causale === ALTRO },
+      { n: 'anno', l: 'Anno', t: 'testo', ph: String(new Date().getFullYear()), inputmode: 'numeric' },
       { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
       { n: 'importo', l: 'Importo', t: 'importo' },
       { n: 'scadenza', l: 'Scadenza', t: 'data' },
       { n: 'pagata', l: 'Già pagata', t: 'interruttore' },
       { n: 'dataPagamento', l: 'Data pagamento', t: 'data', show: v => v.pagata }
     ],
-    valido: v => v.immobileId && v.descrizione.trim() !== '' && (leggiImporto(v.importo) || 0) > 0 && v.scadenza && (!v.pagata || v.dataPagamento),
+    info: v => (base(v) ? 'Nel promemoria e nel registro: ' + descrizione(v) : ''),
+    valido: v => v.immobileId && base(v) && (v.causale === ALTRO ? (v.anno.trim() === '' || annoValido(v)) : annoValido(v))
+      && (leggiImporto(v.importo) || 0) > 0 && v.scadenza && (!v.pagata || v.dataPagamento),
     salva: v => {
-      const dati = { immobileId: v.immobileId, descrizione: v.descrizione.trim(), importo: leggiImporto(v.importo), scadenza: v.scadenza,
+      const dati = { immobileId: v.immobileId, descrizione: descrizione(v), causale: v.causale === ALTRO ? '' : v.causale,
+        altro: v.causale === ALTRO ? v.altro.trim() : '', anno: v.anno.trim(), importo: leggiImporto(v.importo), scadenza: v.scadenza,
         pagata: v.pagata, dataPagamento: v.pagata ? v.dataPagamento : '' };
       if (esistente) Object.assign(esistente, dati); else db.tasse.push(Object.assign({ id: nuovoId() }, dati));
     },
@@ -611,17 +674,33 @@ function moduloTassa(esistente) {
   });
 }
 
+function moduloCausale(esistente) {
+  apriModulo({
+    titolo: esistente ? 'Modifica causale' : 'Nuova causale',
+    valori: { testo: esistente ? esistente.testo : '', id: esistente && esistente.id },
+    campi: [{ n: 'testo', l: 'Causale', t: 'testo', ph: 'es. Prima rata IMU' }],
+    info: () => 'Scrivila senza l\'anno: lo aggiungi ogni volta che registri la tassa (es. Prima rata IMU 2026).',
+    valido: v => v.testo.trim() !== '' && !db.causali.some(c => c.id !== v.id && c.testo.toLowerCase() === v.testo.trim().toLowerCase()),
+    salva: v => {
+      if (esistente) esistente.testo = v.testo.trim(); else db.causali.push({ id: nuovoId(), testo: v.testo.trim() });
+    },
+    elimina: esistente ? () => { db.causali = db.causali.filter(c => c.id !== esistente.id); salva(); } : null,
+    conferma: 'Eliminare questa causale? Le tasse già registrate non cambiano.',
+    etichettaElimina: 'Elimina causale'
+  });
+}
+
 function moduloLettura(esistente) {
   apriModulo({
-    titolo: esistente ? 'Modifica promemoria' : 'Promemoria lettura',
+    titolo: esistente ? 'Modifica promemoria' : 'Nuovo promemoria',
     valori: {
       contatore: esistente ? esistente.contatore : 'Gas', immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
       prossima: esistente ? esistente.prossima : oggi(), ogniMesi: esistente ? esistente.ogniMesi : 1, id: esistente && esistente.id
     },
     campi: [
-      { n: 'contatore', l: 'Contatore', t: 'segmenti', opts: ['Gas', 'Acqua'] },
+      { n: 'contatore', l: 'Promemoria', t: 'segmenti', opts: ['Gas', 'Acqua', 'Affitto'], etichette: { Gas: 'Lettura gas', Acqua: 'Lettura acqua', Affitto: 'Pagare affitto' } },
       { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
-      { n: 'prossima', l: 'Prossima lettura', t: 'data' },
+      { n: 'prossima', l: v => (v.contatore === 'Affitto' ? 'Prossimo pagamento' : 'Prossima lettura'), t: 'data' },
       { n: 'ogniMesi', l: v => (v.ogniMesi === 1 ? 'Ripeti ogni mese' : `Ripeti ogni ${v.ogniMesi} mesi`), t: 'contatore', min: 1, max: 12 }
     ],
     valido: v => v.immobileId && v.prossima,
@@ -727,17 +806,17 @@ function rigaScadenza(v) {
       h('div', { class: 'testi' }, h('div', { class: 't1' }, v.titolo), v.immobile && h('div', { class: 't2' }, v.immobile),
         h('div', { class: 't3' + (ritardo ? ' rosso' : '') }, `${fmtGiorno(v.data)} · ${rel}`)),
       v.importo != null && h('div', { class: 'importo' }, eur(v.importo))),
-    h('button', { class: 'chip', onclick: () => completa(v) }, lettura ? 'Fatta' : 'Pagata'));
+    h('button', { class: 'chip', onclick: () => completa(v) }, lettura ? v.fatto : 'Pagata'));
 }
 
 function vistaScadenze() {
   const nodo = h('div', { class: 'vista' });
-  const azioni = db.immobili.length ? [h('button', { 'aria-label': 'Nuovo promemoria lettura', onclick: () => moduloLettura() }, '＋')] : [];
+  const azioni = db.immobili.length ? [h('button', { 'aria-label': 'Nuovo promemoria', onclick: () => moduloLettura() }, '＋')] : [];
   const voci = vociScadenze();
   if (!db.immobili.length) {
     nodo.append(vuotoMsg('Nessun immobile', 'Aggiungi il tuo primo immobile nella sezione Immobili.', ['Vai a Immobili', () => { stato.scheda = 'immobili'; render(); }]));
   } else if (!voci.length) {
-    nodo.append(vuotoMsg('Nessuna scadenza', 'Tocca ＋ per aggiungere un promemoria di lettura (gas o acqua). Le scadenze di tasse e rate compaiono qui automaticamente.'));
+    nodo.append(vuotoMsg('Nessuna scadenza', 'Tocca ＋ per aggiungere un promemoria (lettura gas o acqua, pagamento affitto). Le scadenze di tasse e rate compaiono qui automaticamente.'));
   } else {
     const t = oggi(), limite = aggiungiGiorni(t, 30);
     [['Scadute', voci.filter(v => v.data < t)], ['Prossimi 30 giorni', voci.filter(v => v.data >= t && v.data <= limite)], ['Più avanti', voci.filter(v => v.data > limite)]]
@@ -755,6 +834,7 @@ function apriVoceRegistro(v) {
   else if (v.k === 'condominio') moduloCondominio(db.condomini.find(x => x.id === v.id));
   else if (v.k === 'affittoVersato') moduloVersamento('affitto', db.affittiVersati.find(x => x.id === v.id));
   else if (v.k === 'condominioVersato') moduloVersamento('condominio', db.condominiVersati.find(x => x.id === v.id));
+  else if (v.k === 'deposito') { const d = db.depositi.find(x => x.id === v.id); moduloDeposito(d.tipo, d); }
   else if (v.k === 'spesa') dettaglioSpesa(v.id);
   else moduloTassa(db.tasse.find(x => x.id === v.id));
 }
@@ -765,7 +845,7 @@ function rigaRegistro(v) {
       h('span', { class: 'ico' }, v.icona),
       h('div', { class: 'testi' }, h('div', { class: 't1' }, v.titolo), v.dettaglio && h('div', { class: 't2' }, v.dettaglio),
         v.stato && h('span', { class: 'etichetta ' + v.stato[1] }, v.stato[0])),
-      h('div', { class: 'destra' }, h('div', { class: 'importo ' + (v.entrata ? 'entrata' : 'uscita') }, (v.entrata ? '+ ' : '− ') + eur(v.importo)),
+      h('div', { class: 'destra' }, h('div', { class: 'importo ' + (v.deposito ? 'blu' : v.entrata ? 'entrata' : 'uscita') }, (v.deposito ? '' : v.entrata ? '+ ' : '− ') + eur(v.importo)),
         h('div', { class: 't3' }, fmtGiorno(v.data)))));
 }
 
@@ -780,7 +860,8 @@ function vistaRegistro() {
   const lista = h('div', { class: 'vista' });
   const disegnaLista = () => {
     const parole = semplifica(stato.ricerca).split(/\s+/).filter(Boolean);
-    const voci = tutte.filter(v => (stato.filtro === 'tutti' || (stato.filtro === 'entrate') === v.entrata)
+    const flusso = v => (v.deposito ? 'depositi' : v.entrata ? 'entrate' : 'uscite');
+    const voci = tutte.filter(v => (stato.filtro === 'tutti' || stato.filtro === flusso(v))
       && (!parole.length || parole.every(p => testoRicerca(v).includes(p))));
     if (!tutte.length) { lista.replaceChildren(vuotoMsg('Registro vuoto', 'Tocca ＋ per registrare affitti, quote condominio, spese straordinarie o tasse.')); return; }
     if (!voci.length) { lista.replaceChildren(vuotoMsg('Nessun risultato', 'Prova con altre parole.')); return; }
@@ -790,7 +871,7 @@ function vistaRegistro() {
       h('div', { class: 'sezione' }, h('h2', {}, fmtMese(m)),
         h('div', { class: 'gruppo' }, perMese[m].sort((a, b) => b.data.localeCompare(a.data)).map(rigaRegistro)))));
   };
-  const filtri = h('div', { class: 'segmenti' }, [['tutti', 'Tutti'], ['entrate', 'Entrate'], ['uscite', 'Uscite']].map(([k, t]) =>
+  const filtri = h('div', { class: 'segmenti' }, [['tutti', 'Tutti'], ['entrate', 'Entrate'], ['uscite', 'Uscite'], ['depositi', 'Depositi']].map(([k, t]) =>
     h('button', { class: stato.filtro === k ? 'attivo' : '', onclick: e => {
       stato.filtro = k; filtri.querySelectorAll('button').forEach(b => b.classList.toggle('attivo', b === e.currentTarget)); disegnaLista();
     } }, t)));
@@ -804,7 +885,8 @@ function vistaRegistro() {
 function menuRegistra() {
   const scelte = [['🏠', 'Affitto ricevuto', () => moduloAffitto()], ['🏢', 'Quota condominio ricevuta', () => moduloCondominio()],
     ['🏠', 'Affitto versato', () => moduloVersamento('affitto')], ['🏢', 'Quota condominio versata', () => moduloVersamento('condominio')],
-    ['🔨', 'Spesa straordinaria', moduloSpesa], ['🏛️', 'Tassa', moduloTassa]];
+    ['🔑', 'Deposito cauzionale versato', () => moduloDeposito('versato')], ['🔑', 'Deposito cauzionale incassato', () => moduloDeposito('incassato')],
+    ['🔨', 'Spesa straordinaria', moduloSpesa], ['🏛️', 'Tassa', () => moduloTassa()]];
   const corpo = h('div', { class: 'gruppo' }, scelte.map(([i, t, f]) =>
     h('button', { class: 'scelta-voce', onclick: () => { velo.chiudi(); f(); } }, h('span', {}, i), t)));
   const velo = apriFoglio('Registra', corpo, { sinistra: 'Chiudi' });
@@ -834,13 +916,50 @@ function grafico(punti) {
     svg('text', { x: 0, y: 10, 'font-size': 10, fill: 'var(--sub)' }, eur(max)), ...barre);
 }
 
+/* Immobili scelti nel bilancio: elenco vuoto = tutti. */
+function immobiliSelezionati() {
+  const validi = stato.immBilancio.filter(id => immobile(id));
+  return validi.length && validi.length < db.immobili.length ? validi : [];
+}
+
+function testoSelezione() {
+  const sel = immobiliSelezionati();
+  if (!sel.length) return 'Tutti gli immobili';
+  return sel.length === 1 ? nomeImmobile(sel[0]) : `${sel.length} immobili selezionati`;
+}
+
+function apriSelezioneImmobili() {
+  const corpo = h('div', { class: 'vista' });
+  const disegna = () => {
+    const sel = immobiliSelezionati();
+    const tutti = sel.length === 0;
+    corpo.replaceChildren(
+      h('div', { class: 'gruppo' },
+        h('button', { class: 'riga-sel tutti', onclick: () => { stato.immBilancio = []; disegna(); } },
+          h('span', {}, 'Tutti gli immobili'), h('span', { class: 'spunta' }, tutti ? '✓' : '')),
+        opzImmobili().map(o => h('label', { class: 'riga-sel' }, h('span', {}, o.l),
+          h('input', { type: 'checkbox', class: 'interruttore', role: 'switch', checked: tutti || sel.includes(o.v), onchange: e => {
+            const corrente = tutti ? opzImmobili().map(x => x.v) : sel.slice();
+            const nuovo = e.target.checked ? [...new Set([...corrente, o.v])] : corrente.filter(x => x !== o.v);
+            if (!nuovo.length) avviso('Seleziona almeno un immobile.');
+            else stato.immBilancio = nuovo.length === db.immobili.length ? [] : nuovo;
+            disegna();
+          } })))),
+      h('p', { class: 'nota' }, 'Puoi scegliere uno, più immobili o tutti: il bilancio mostra la somma di quelli selezionati.'));
+  };
+  apriFoglio('Immobili del bilancio', corpo, { sinistra: 'Fine' });
+  disegna();
+}
+
 function vistaBilancio() {
+  const sel = immobiliSelezionati();
+  const inSel = id => !sel.length || sel.includes(id);
   const tutti = movimentiEffettivi();
   const anni = new Set([new Date().getFullYear(), stato.anno]);
   tutti.forEach(m => anni.add(Number(m.data.slice(0, 4))));
-  const mov = tutti.filter(m => Number(m.data.slice(0, 4)) === stato.anno && (!stato.immBilancio || m.immobileId === stato.immBilancio));
+  const mov = tutti.filter(m => Number(m.data.slice(0, 4)) === stato.anno && inSel(m.immobileId));
   const somma = cat => mov.filter(m => m.cat === cat).reduce((t, m) => t + m.importo, 0);
-  const entrate = somma('affitti') + somma('condominio');
+  const entrate = CAT_ENTRATE.reduce((t, c) => t + somma(c), 0);
   const uscite = CAT_USCITE.reduce((t, c) => t + somma(c), 0);
   const saldo = entrate - uscite;
   const punti = Array.from({ length: 12 }, (_, i) => {
@@ -848,18 +967,20 @@ function vistaBilancio() {
     return { e: delMese.filter(m => CAT_ENTRATE.includes(m.cat)).reduce((t, m) => t + m.importo, 0),
       u: delMese.filter(m => CAT_USCITE.includes(m.cat)).reduce((t, m) => t + m.importo, 0) };
   });
+  // Depositi cauzionali: tracciati a parte, non fanno parte di entrate, costi e saldo.
+  const depositi = db.depositi.filter(d => inSel(d.immobileId));
+  const sommaDep = tipo => depositi.filter(d => d.tipo === tipo).reduce((t, d) => t + d.importo, 0);
 
   const selAnno = h('select', { 'aria-label': 'Anno', onchange: e => { stato.anno = Number(e.target.value); render(); } },
     [...anni].sort((a, b) => b - a).map(a => h('option', { value: a }, a)));
   selAnno.value = stato.anno;
-  const selImm = h('select', { 'aria-label': 'Immobile', onchange: e => { stato.immBilancio = e.target.value; render(); } },
-    h('option', { value: '' }, 'Tutti gli immobili'), opzImmobili().map(o => h('option', { value: o.v }, o.l)));
-  selImm.value = stato.immBilancio;
+  const selettore = h('button', { class: 'selettore', 'aria-label': 'Immobili', onclick: apriSelezioneImmobili },
+    h('span', {}, testoSelezione()), h('span', { class: 'grigio' }, '›'));
 
   const righe = cats => h('div', { class: 'gruppo' }, cats.map(c => h('div', { class: 'voce-tot' }, h('span', {}, CATEGORIE[c]), h('span', {}, eur(somma(c))))));
 
   const nodo = h('div', { class: 'vista' },
-    h('div', { class: 'scelte' }, selAnno, selImm),
+    h('div', { class: 'scelte' }, selAnno, selettore),
     h('div', { class: 'totali' },
       h('div', { class: 'totale' }, h('small', {}, 'Entrate ricevute'), h('strong', { class: 'entrata' }, eur(entrate))),
       h('div', { class: 'totale' }, h('small', {}, 'Costi sostenuti'), h('strong', { class: 'uscita' }, eur(uscite))),
@@ -869,7 +990,12 @@ function vistaBilancio() {
         h('div', { class: 'leg' }, h('span', {}, h('i', { style: 'background:var(--verde)' }), 'Entrate'), h('span', {}, h('i', { style: 'background:var(--rosso)' }), 'Uscite')))) : null,
     h('div', { class: 'sezione' }, h('h2', {}, 'Entrate per categoria'), righe(CAT_ENTRATE)),
     h('div', { class: 'sezione' }, h('h2', {}, 'Costi per categoria'), righe(CAT_USCITE)),
-    h('p', { class: 'nota' }, 'Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata). Affitti e quote condominio contano alla data di incasso.'));
+    depositi.length ? h('div', { class: 'sezione' }, h('h2', {}, 'Depositi cauzionali (non inclusi nei totali)'),
+      h('div', { class: 'gruppo' },
+        h('div', { class: 'voce-tot' }, h('span', {}, 'Versati (da riavere)'), h('span', { class: 'blu' }, eur(sommaDep('versato')))),
+        h('div', { class: 'voce-tot' }, h('span', {}, 'Incassati (da restituire)'), h('span', { class: 'blu' }, eur(sommaDep('incassato'))))),
+      h('p', { class: 'nota' }, 'Tutti i depositi ancora registrati per gli immobili scelti, di qualsiasi anno. Non sono né entrate né costi: a fine contratto vengono restituiti o trattenuti.')) : null,
+    h('p', { class: 'nota' }, 'Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata). Affitti e quote condominio (ricevuti o versati) contano alla data di incasso/pagamento.'));
   return { titolo: 'Bilancio', azioni: [], nodo };
 }
 
@@ -885,6 +1011,12 @@ function vistaImmobili() {
         h('span', { class: 'ico' }, '🏘️'),
         h('div', { class: 'testi' }, h('div', { class: 't1' }, i.nome), i.indirizzo && h('div', { class: 't2' }, i.indirizzo)))))));
   }
+  nodo.append(h('div', { class: 'sezione' }, h('h2', {}, 'Causali delle tasse'),
+    h('div', { class: 'gruppo' },
+      causaliOrdinate().map(c => h('div', { class: 'riga' }, h('button', { class: 'riga-main', onclick: () => moduloCausale(c) },
+        h('div', { class: 'testi' }, h('div', { class: 't1' }, c.testo))))),
+      h('button', { class: 'link', onclick: () => moduloCausale() }, '＋ Aggiungi causale')),
+    h('p', { class: 'nota' }, 'Nel modulo della tassa scegli la causale e aggiungi solo l\'anno: es. "Prima rata IMU" + 2026 = "Prima rata IMU 2026".')));
   const file = h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: e => { if (e.target.files[0]) importaCopia(e.target.files[0]); e.target.value = ''; } });
   nodo.append(h('div', { class: 'sezione' }, h('h2', {}, 'Copia dei dati'),
     h('div', { class: 'gruppo' },
