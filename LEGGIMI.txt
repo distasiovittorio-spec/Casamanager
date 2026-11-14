@@ -37,11 +37,18 @@ PRIVACY
 
 FUNZIONI
 - Immobili: elenco, affittuari con inizio/fine contratto, riunioni di condominio con note.
-- Registro: affitti e quote condominio ricevuti e versati, depositi cauzionali versati e incassati, spese straordinarie (anche a rate), tasse. Con ricerca e filtro Entrate/Uscite.
+- Registro: affitti ricevuti e versati, quote condominio ricevute e versate, depositi cauzionali versati e incassati, spese straordinarie (anche a rate), tasse. Con ricerca e filtro Entrate/Uscite.
 - Scadenze: promemoria ripetuti ogni N mesi (lettura gas, lettura acqua, pagare affitto), tasse e rate da pagare.
   Le tasse usano causali standard modificabili (Immobili > Causali delle tasse): scegli "Prima rata IMU", aggiungi l'anno e compare "Prima rata IMU 2026".
 - Bilancio: entrate e costi per anno e per uno, piu' o tutti gli immobili, con grafico mensile.
-  I depositi cauzionali sono tracciati a parte e NON entrano in entrate, costi e saldo.
+  Le quote condominio (ricevute e versate) e i depositi cauzionali aperti sono tracciati a parte e NON entrano in entrate, costi, saldo e grafico.
+  Chiudendo un deposito (fine contratto) la parte restituita non ha effetti; la parte trattenuta diventa entrata (deposito incassato)
+  o costo (deposito versato) alla data di chiusura.
+- Controllo ritardi: per i mesi precedenti a quello in corso segnala affitti e quote condominio non ricevuti (per gli affittuari con il
+  controllo attivo, dal mese scelto) e quote condominio ricevute ma non versate. Compare come avviso in Scadenze, si apre da solo alla
+  prima apertura di ogni mese e il Calendario ricorda ogni 1° del mese di controllare (evento incluso in "Aggiungi gli avvisi al Calendario").
+  Il controllo parte dal mese in cui si installa questa versione, senza segnalare arretrati.
+- Report: in Bilancio > Report scegli le tipologie di dati e crea un file CSV (si apre con Numbers, Excel, Fogli Google).
   Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata).
   Affitti e quote condominio (ricevuti o versati) contano alla data di incasso/pagamento.
 

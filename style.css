@@ -175,3 +175,10 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12
 .riga-sel > span:first-child { overflow-wrap: anywhere; }
 .riga-sel.tutti { font-weight: 600; }
 .spunta { color: var(--accento); font-weight: 700; font-size: 20px; }
+
+/* ---------- Avvisi e filtri ---------- */
+.allerta { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 12px 14px; border-radius: 14px; border: 0;
+  border-left: 5px solid var(--arancio); background: color-mix(in srgb, var(--arancio) 14%, var(--card)); }
+.allerta .ico { font-size: 22px; }
+.segmenti { overflow-x: auto; }
+.segmenti button { white-space: nowrap; padding: 7px 8px; font-size: 13px; }

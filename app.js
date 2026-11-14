@@ -19,6 +19,7 @@ function vuoto() {
 function normalizza(grezzo) {
   const d = vuoto();
   TABELLE.forEach(t => { if (Array.isArray(grezzo && grezzo[t])) d[t] = grezzo[t]; });
+  if (grezzo && /^\d{4}-\d{2}$/.test(grezzo.controlloDal || '')) d.controlloDal = grezzo.controlloDal;
   return d;
 }
 
@@ -215,31 +216,37 @@ function completa(v) {
 
 /* ----- Registro ----- */
 
+function statoDeposito(d) {
+  if (!d.chiusura) return ['Aperto · non incluso nel bilancio', 'blu'];
+  const c = d.chiusura, incassato = d.tipo === 'incassato';
+  if (c.trattenuto > 0.004) return [`Chiuso: restituiti ${eur(c.restituito)}, ${eur(c.trattenuto)} ${incassato ? 'trattenuti' : 'non restituiti'}`, 'arancio'];
+  return ['Chiuso: restituito per intero', 'verde'];
+}
+
 function vociRegistro() {
   const voci = [];
   for (const a of db.affitti) {
     const inq = db.affittuari.find(x => x.id === a.affittuarioId);
-    voci.push({ k: 'affitto', id: a.id, entrata: true, data: a.data, importo: a.importo, icona: '🏠', categoria: 'Affitto',
+    voci.push({ k: 'affitto', id: a.id, gruppo: 'entrata', entrata: true, data: a.data, importo: a.importo, icona: '🏠', categoria: 'Affitto',
       titolo: `Affitto ${fmtMese(a.mese)}`, dettaglio: [nomeImmobile(a.immobileId), inq ? inq.nome : ''].filter(Boolean).join(' · ') });
   }
-  for (const q of db.condomini) {
-    voci.push({ k: 'condominio', id: q.id, entrata: true, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
-      titolo: `Condominio ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
-  }
   for (const q of db.affittiVersati) {
-    voci.push({ k: 'affittoVersato', id: q.id, entrata: false, data: q.data, importo: q.importo, icona: '🏠', categoria: 'Affitto versato',
+    voci.push({ k: 'affittoVersato', id: q.id, gruppo: 'uscita', entrata: false, data: q.data, importo: q.importo, icona: '🏠', categoria: 'Affitto versato',
       titolo: `Affitto versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
   }
+  for (const q of db.condomini) {
+    voci.push({ k: 'condominio', id: q.id, gruppo: 'condominio', entrata: true, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
+      titolo: `Condominio ricevuto ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId), stato: ['Non incluso in entrate/uscite', 'blu'] });
+  }
   for (const q of db.condominiVersati) {
-    voci.push({ k: 'condominioVersato', id: q.id, entrata: false, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio versato',
-      titolo: `Condominio versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
+    voci.push({ k: 'condominioVersato', id: q.id, gruppo: 'condominio', entrata: false, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
+      titolo: `Condominio versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId), stato: ['Non incluso in entrate/uscite', 'blu'] });
   }
   for (const d of db.depositi) {
     const inq = db.affittuari.find(x => x.id === d.affittuarioId);
-    const versato = d.tipo === 'versato';
-    voci.push({ k: 'deposito', id: d.id, deposito: true, entrata: false, data: d.data, importo: d.importo, icona: '🔑', categoria: 'Deposito cauzionale',
-      titolo: versato ? 'Deposito cauzionale versato' : 'Deposito cauzionale incassato',
-      dettaglio: [nomeImmobile(d.immobileId), inq ? inq.nome : ''].filter(Boolean).join(' · '), stato: ['Non incluso nel bilancio', 'blu'] });
+    voci.push({ k: 'deposito', id: d.id, gruppo: 'deposito', data: d.data, importo: d.importo, icona: '🔑', categoria: 'Deposito cauzionale',
+      titolo: d.tipo === 'versato' ? 'Deposito cauzionale versato' : 'Deposito cauzionale incassato',
+      dettaglio: [nomeImmobile(d.immobileId), inq ? inq.nome : ''].filter(Boolean).join(' · '), stato: statoDeposito(d) });
   }
   for (const s of db.spese) {
     const rate = speseRate(s.id);
@@ -248,11 +255,11 @@ function vociRegistro() {
     if (rate.length && pagate === rate.length) stato = ['Pagata', 'verde'];
     else if (rate.length > 1) stato = [`${pagate} di ${rate.length} rate pagate`, 'arancio'];
     else stato = ['Da pagare', 'arancio'];
-    voci.push({ k: 'spesa', id: s.id, entrata: false, data: s.data, importo: s.totale, icona: '🔨', categoria: 'Spesa straordinaria',
+    voci.push({ k: 'spesa', id: s.id, gruppo: 'uscita', entrata: false, data: s.data, importo: s.totale, icona: '🔨', categoria: 'Spesa straordinaria',
       titolo: s.descrizione, dettaglio: nomeImmobile(s.immobileId), stato });
   }
   for (const t of db.tasse) {
-    voci.push({ k: 'tassa', id: t.id, entrata: false, data: t.pagata ? (t.dataPagamento || t.scadenza) : t.scadenza,
+    voci.push({ k: 'tassa', id: t.id, gruppo: 'uscita', entrata: false, data: t.pagata ? (t.dataPagamento || t.scadenza) : t.scadenza,
       importo: t.importo, icona: '🏛️', categoria: 'Tassa', titolo: t.descrizione, dettaglio: nomeImmobile(t.immobileId),
       stato: t.pagata ? ['Pagata', 'verde'] : ['Da pagare', 'arancio'] });
   }
@@ -260,7 +267,7 @@ function vociRegistro() {
 }
 
 function testoRicerca(v) {
-  return semplifica([v.titolo, v.dettaglio, v.categoria, v.deposito ? 'deposito cauzione cauzionale' : v.entrata ? 'entrata' : 'uscita',
+  return semplifica([v.titolo, v.dettaglio, v.categoria, v.gruppo === 'deposito' ? 'deposito cauzione cauzionale' : v.gruppo === 'condominio' ? 'condominio quota' : v.entrata ? 'entrata' : 'uscita',
     eur(v.importo), testoImporto(v.importo), v.importo.toFixed(0), fmtMese(v.data.slice(0, 7)), fmtGiorno(v.data)].join(' '));
 }
 
@@ -272,12 +279,53 @@ function movimentiEffettivi() {
   db.condomini.forEach(q => m.push({ data: q.data, importo: q.importo, cat: 'condominio', immobileId: q.immobileId }));
   db.affittiVersati.forEach(q => m.push({ data: q.data, importo: q.importo, cat: 'affittoVersato', immobileId: q.immobileId }));
   db.condominiVersati.forEach(q => m.push({ data: q.data, importo: q.importo, cat: 'condominioVersato', immobileId: q.immobileId }));
+  // Depositi chiusi: conta solo la parte trattenuta (entrata se incassato, costo se versato), alla data di chiusura.
+  db.depositi.filter(d => d.chiusura && d.chiusura.trattenuto > 0.004).forEach(d => m.push({ data: d.chiusura.data, importo: d.chiusura.trattenuto,
+    cat: d.tipo === 'incassato' ? 'cauzioneTrattenuta' : 'cauzioneNonRestituita', immobileId: d.immobileId }));
   db.rate.filter(r => r.pagata).forEach(r => {
     const s = db.spese.find(x => x.id === r.spesaId);
     m.push({ data: r.dataPagamento || r.scadenza, importo: r.importo, cat: 'spese', immobileId: s ? s.immobileId : '' });
   });
   db.tasse.filter(t => t.pagata).forEach(t => m.push({ data: t.dataPagamento || t.scadenza, importo: t.importo, cat: 'tasse', immobileId: t.immobileId }));
   return m;
+}
+
+/* ----- Controllo ritardi -----
+   Si guardano solo i mesi PRECEDENTI a quello in corso:
+   - affitto o quota condominio non ricevuti, per gli affittuari con il controllo attivo (dal mese scelto, entro la durata del contratto);
+   - quote condominio ricevute ma senza il relativo versamento (per le quote dal mese di attivazione del controllo in poi). */
+const mesePrecedente = ym => aggiungiMesi(ym + '-01', -1).slice(0, 7);
+
+function ritardi() {
+  const corrente = meseCorrente();
+  const ultimoControllabile = mesePrecedente(corrente);
+  const elenco = [];
+  for (const a of db.affittuari) {
+    const imm = immobile(a.immobileId);
+    if (!imm || !a.controlloDal) continue;
+    const primo = [a.controlloDal, a.inizio.slice(0, 7)].sort().pop();
+    const ultimo = [ultimoControllabile, a.fine.slice(0, 7)].sort()[0];
+    for (let m = primo; m <= ultimo; m = aggiungiMesi(m + '-01', 1).slice(0, 7)) {
+      if (a.controlloAffitto !== false && !db.affitti.some(x => x.mese === m && (x.affittuarioId === a.id || (!x.affittuarioId && x.immobileId === a.immobileId)))) {
+        elenco.push({ tipo: 'affitto', mese: m, immobileId: a.immobileId, affittuarioId: a.id, titolo: `Affitto ${fmtMese(m)}`, dettaglio: `${a.nome} · ${imm.nome}` });
+      }
+      if (a.controlloCondominio !== false && !db.condomini.some(x => x.mese === m && x.immobileId === a.immobileId)) {
+        elenco.push({ tipo: 'condominio', mese: m, immobileId: a.immobileId, titolo: `Condominio ${fmtMese(m)}`, dettaglio: `${a.nome} · ${imm.nome}` });
+      }
+    }
+  }
+  const dal = db.controlloDal || corrente;
+  const viste = new Set();
+  for (const q of db.condomini) {
+    const chiave = q.immobileId + q.mese;
+    if (q.mese >= corrente || q.mese < dal || viste.has(chiave) || !immobile(q.immobileId)) continue;
+    viste.add(chiave);
+    if (!db.condominiVersati.some(x => x.immobileId === q.immobileId && x.mese === q.mese)) {
+      elenco.push({ tipo: 'nonVersata', mese: q.mese, immobileId: q.immobileId, quotaId: q.id, titolo: `Condominio ${fmtMese(q.mese)}`,
+        dettaglio: `${nomeImmobile(q.immobileId)} · ${eur(q.importo)} ricevuti, non versati` });
+    }
+  }
+  return elenco.sort((x, y) => x.mese.localeCompare(y.mese));
 }
 
 /* =================== Interfaccia: strumenti =================== */
@@ -368,6 +416,7 @@ function apriModulo(cfg) {
   }
 
   const corpo = [corpoCampi, nota];
+  (cfg.extra || []).forEach(x => corpo.push(h('button', { class: 'btn secondario pieno', onclick: () => { foglio.chiudi(); x.azione(); } }, x.testo)));
   if (cfg.elimina) {
     corpo.push(h('button', { class: 'btn pericolo pieno', onclick: () => {
       if (confirm(cfg.conferma || 'Eliminare definitivamente?')) { cfg.elimina(); foglio.chiudi(); }
@@ -406,18 +455,28 @@ function moduloAffittuario(imm, esistente) {
   const quattroAnni = aggiungiMesi(oggi(), 48);
   apriModulo({
     titolo: esistente ? 'Modifica affittuario' : 'Nuovo affittuario',
-    valori: { nome: esistente ? esistente.nome : '', inizio: esistente ? esistente.inizio : oggi(), fine: esistente ? esistente.fine : quattroAnni, id: esistente && esistente.id },
+    valori: {
+      nome: esistente ? esistente.nome : '', inizio: esistente ? esistente.inizio : oggi(), fine: esistente ? esistente.fine : quattroAnni, id: esistente && esistente.id,
+      controlloAffitto: esistente ? esistente.controlloAffitto !== false : true,
+      controlloCondominio: esistente ? esistente.controlloCondominio !== false : true,
+      controlloDal: esistente && esistente.controlloDal ? esistente.controlloDal : meseCorrente()
+    },
     campi: [
       { n: 'nome', l: 'Nome e cognome', t: 'testo' },
       { n: 'inizio', l: 'Inizio contratto', t: 'data' },
-      { n: 'fine', l: 'Fine contratto', t: 'data' }
+      { n: 'fine', l: 'Fine contratto', t: 'data' },
+      { n: 'controlloAffitto', l: 'Avvisa se l\'affitto è in ritardo', t: 'interruttore' },
+      { n: 'controlloCondominio', l: 'Avvisa se la quota condominio è in ritardo', t: 'interruttore' },
+      { n: 'controlloDal', l: 'Controlla dal mese', t: 'mese', show: v => v.controlloAffitto || v.controlloCondominio }
     ],
-    valido: v => v.nome.trim() !== '' && v.inizio && v.fine && v.fine >= v.inizio,
+    valido: v => v.nome.trim() !== '' && v.inizio && v.fine && v.fine >= v.inizio && ((!v.controlloAffitto && !v.controlloCondominio) || v.controlloDal),
     info: v => (v.inizio && v.fine && v.fine < v.inizio ? 'La data di fine deve essere successiva all\'inizio.' : ''),
     infoErrore: () => true,
     salva: v => {
-      if (esistente) Object.assign(esistente, { nome: v.nome.trim(), inizio: v.inizio, fine: v.fine });
-      else db.affittuari.push({ id: nuovoId(), immobileId: imm.id, nome: v.nome.trim(), inizio: v.inizio, fine: v.fine });
+      const dati = { nome: v.nome.trim(), inizio: v.inizio, fine: v.fine, controlloAffitto: v.controlloAffitto,
+        controlloCondominio: v.controlloCondominio, controlloDal: v.controlloDal };
+      if (esistente) Object.assign(esistente, dati);
+      else db.affittuari.push(Object.assign({ id: nuovoId(), immobileId: imm.id }, dati));
     },
     elimina: esistente ? () => eliminaAffittuario(esistente.id) : null,
     conferma: 'Eliminare questo affittuario? Gli affitti già registrati restano nel registro.',
@@ -446,15 +505,21 @@ function moduloRiunione(imm, esistente) {
   });
 }
 
-function moduloAffitto(esistente) {
+function ultimoImporto(tabella, filtro) {
+  const l = db[tabella].filter(filtro).sort((a, b) => b.data.localeCompare(a.data))[0];
+  return l ? testoImporto(l.importo) : '';
+}
+
+function moduloAffitto(esistente, pre) {
+  pre = pre || {};
   apriModulo({
     titolo: esistente ? 'Modifica affitto' : 'Affitto ricevuto',
     valori: {
-      immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
-      affittuarioId: esistente ? esistente.affittuarioId : '',
-      mese: esistente ? esistente.mese : meseCorrente(),
+      immobileId: esistente ? esistente.immobileId : (pre.immobileId || immobilePredefinito()),
+      affittuarioId: esistente ? esistente.affittuarioId : (pre.affittuarioId || ''),
+      mese: esistente ? esistente.mese : (pre.mese || meseCorrente()),
       data: esistente ? esistente.data : oggi(),
-      importo: esistente ? testoImporto(esistente.importo) : '', id: esistente && esistente.id
+      importo: esistente ? testoImporto(esistente.importo) : (pre.importo || ''), id: esistente && esistente.id
     },
     campi: [
       { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
@@ -474,16 +539,17 @@ function moduloAffitto(esistente) {
   });
 }
 
-function moduloVersamento(tipo, esistente) {
+function moduloVersamento(tipo, esistente, pre) {
+  pre = pre || {};
   const affitto = tipo === 'affitto';
   const tabella = affitto ? 'affittiVersati' : 'condominiVersati';
   apriModulo({
     titolo: esistente ? (affitto ? 'Modifica affitto versato' : 'Modifica quota condominio versata') : (affitto ? 'Affitto versato' : 'Quota condominio versata'),
     valori: {
-      immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
-      mese: esistente ? esistente.mese : meseCorrente(),
+      immobileId: esistente ? esistente.immobileId : (pre.immobileId || immobilePredefinito()),
+      mese: esistente ? esistente.mese : (pre.mese || meseCorrente()),
       data: esistente ? esistente.data : oggi(),
-      importo: esistente ? testoImporto(esistente.importo) : '', id: esistente && esistente.id
+      importo: esistente ? testoImporto(esistente.importo) : (pre.importo || ''), id: esistente && esistente.id
     },
     campi: [
       { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
@@ -491,6 +557,7 @@ function moduloVersamento(tipo, esistente) {
       { n: 'data', l: 'Data pagamento', t: 'data' },
       { n: 'importo', l: 'Importo', t: 'importo' }
     ],
+    info: () => (affitto ? '' : 'Le quote condominio non sono conteggiate in entrate e uscite: compaiono nella sezione dedicata del bilancio.'),
     valido: v => v.immobileId && v.mese && v.data && (leggiImporto(v.importo) || 0) > 0,
     salva: v => {
       const dati = { immobileId: v.immobileId, mese: v.mese, data: v.data, importo: leggiImporto(v.importo) };
@@ -504,7 +571,7 @@ function moduloVersamento(tipo, esistente) {
 function moduloDeposito(tipo, esistente) {
   const incassato = tipo === 'incassato';
   apriModulo({
-    titolo: esistente ? 'Modifica deposito cauzionale' : (incassato ? 'Deposito cauzionale incassato' : 'Deposito cauzionale versato'),
+    titolo: esistente ? 'Deposito cauzionale' : (incassato ? 'Deposito cauzionale incassato' : 'Deposito cauzionale versato'),
     valori: {
       immobileId: esistente ? esistente.immobileId : immobilePredefinito(), affittuarioId: esistente ? esistente.affittuarioId : '',
       data: esistente ? esistente.data : oggi(), importo: esistente ? testoImporto(esistente.importo) : '', id: esistente && esistente.id
@@ -516,25 +583,61 @@ function moduloDeposito(tipo, esistente) {
       { n: 'data', l: incassato ? 'Data incasso' : 'Data versamento', t: 'data' },
       { n: 'importo', l: 'Importo', t: 'importo' }
     ],
-    info: () => 'Viene registrato ma non conteggiato in entrate, costi e saldo del bilancio: ' + (incassato ? 'andrà restituito o trattenuto a fine contratto.' : 'ti sarà restituito a fine contratto.'),
+    info: () => {
+      if (esistente && esistente.chiusura) return 'Depositi chiusi: ' + statoDeposito(esistente)[0] + ' il ' + fmtGiorno(esistente.chiusura.data) + '.';
+      return 'Non è conteggiato in entrate, costi e saldo finché non lo chiudi a fine contratto.';
+    },
     valido: v => v.immobileId && v.data && (leggiImporto(v.importo) || 0) > 0,
     salva: v => {
       const dati = { tipo: esistente ? esistente.tipo : tipo, immobileId: v.immobileId, affittuarioId: incassato ? v.affittuarioId : '', data: v.data, importo: leggiImporto(v.importo) };
       if (esistente) Object.assign(esistente, dati); else db.depositi.push(Object.assign({ id: nuovoId() }, dati));
     },
+    extra: esistente ? [esistente.chiusura
+      ? { testo: 'Riapri il deposito', azione: () => { if (confirm('Riaprire il deposito? La chiusura verrà annullata.')) { esistente.chiusura = null; salva(); render(); } } }
+      : { testo: 'Chiudi il deposito (fine contratto)', azione: () => moduloChiusuraDeposito(esistente) }] : null,
     elimina: esistente ? () => { db.depositi = db.depositi.filter(x => x.id !== esistente.id); salva(); } : null,
     conferma: 'Eliminare questo deposito dal registro?'
   });
 }
 
-function moduloCondominio(esistente) {
+function moduloChiusuraDeposito(d) {
+  const incassato = d.tipo === 'incassato';
+  const importo = leggiImporto;
+  apriModulo({
+    titolo: 'Chiudi deposito cauzionale',
+    valori: { data: oggi(), restituito: testoImporto(d.importo), id: d.id },
+    campi: [
+      { n: 'data', l: 'Data di chiusura', t: 'data' },
+      { n: 'restituito', l: incassato ? 'Importo restituito' : 'Importo riavuto', t: 'importo' }
+    ],
+    info: v => {
+      const r = importo(v.restituito);
+      if (r === null) return 'Scrivi l\'importo restituito (anche 0).';
+      if (r > d.importo + 0.004) return `Non può superare il deposito di ${eur(d.importo)}.`;
+      const t = Math.round((d.importo - r) * 100) / 100;
+      if (t < 0.005) return 'Restituito per intero: nessun effetto sul bilancio.';
+      return incassato
+        ? `${eur(t)} trattenuti: contano come entrata nel bilancio alla data di chiusura.`
+        : `${eur(t)} non restituiti: contano come costo nel bilancio alla data di chiusura.`;
+    },
+    infoErrore: v => importo(v.restituito) === null || importo(v.restituito) > d.importo + 0.004,
+    valido: v => v.data && importo(v.restituito) !== null && importo(v.restituito) <= d.importo + 0.004,
+    salva: v => {
+      const r = importo(v.restituito);
+      d.chiusura = { data: v.data, restituito: r, trattenuto: Math.round((d.importo - r) * 100) / 100 };
+    }
+  });
+}
+
+function moduloCondominio(esistente, pre) {
+  pre = pre || {};
   apriModulo({
     titolo: esistente ? 'Modifica quota condominio' : 'Quota condominio ricevuta',
     valori: {
-      immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
-      mese: esistente ? esistente.mese : meseCorrente(),
+      immobileId: esistente ? esistente.immobileId : (pre.immobileId || immobilePredefinito()),
+      mese: esistente ? esistente.mese : (pre.mese || meseCorrente()),
       data: esistente ? esistente.data : oggi(),
-      importo: esistente ? testoImporto(esistente.importo) : '', id: esistente && esistente.id
+      importo: esistente ? testoImporto(esistente.importo) : (pre.importo || ''), id: esistente && esistente.id
     },
     campi: [
       { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
@@ -542,6 +645,7 @@ function moduloCondominio(esistente) {
       { n: 'data', l: 'Data incasso', t: 'data' },
       { n: 'importo', l: 'Importo', t: 'importo' }
     ],
+    info: () => 'Le quote condominio non sono conteggiate in entrate e uscite: compaiono nella sezione dedicata del bilancio.',
     valido: v => v.immobileId && v.mese && v.data && (leggiImporto(v.importo) || 0) > 0,
     salva: v => {
       const dati = { immobileId: v.immobileId, mese: v.mese, data: v.data, importo: leggiImporto(v.importo) };
@@ -742,9 +846,9 @@ function piegaIcs(riga) {
 function costruisciIcs() {
   const stampa = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
   const r = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CasaManager//IT', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:CasaManager'];
+  const allarme = (descr, trigger) => ['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + escIcs(descr), 'TRIGGER:' + trigger, 'END:VALARM'];
   for (const v of vociScadenze()) {
     const dettaglio = [v.immobile, v.importo != null ? eur(v.importo) : ''].filter(Boolean).join(' · ');
-    const allarme = (descr, trigger) => ['BEGIN:VALARM', 'ACTION:DISPLAY', 'DESCRIPTION:' + escIcs(descr), 'TRIGGER:' + trigger, 'END:VALARM'];
     r.push('BEGIN:VEVENT', `UID:${v.tipo}-${v.id}@casamanager`, `DTSTAMP:${stampa}`,
       `DTSTART;VALUE=DATE:${v.data.replace(/-/g, '')}`, `DTEND;VALUE=DATE:${aggiungiGiorni(v.data, 1).replace(/-/g, '')}`,
       'SUMMARY:' + escIcs(v.titolo + (v.immobile ? ' - ' + v.immobile : '')));
@@ -752,12 +856,20 @@ function costruisciIcs() {
     if (v.tipo === 'lettura') r.push(`RRULE:FREQ=MONTHLY;INTERVAL=${Math.max(1, v.ogniMesi)};COUNT=24`);
     r.push(...allarme(v.titolo + ' tra 3 giorni', '-P2DT15H'), ...allarme(v.titolo + ' oggi', 'PT9H'), 'END:VEVENT');
   }
+  if (db.immobili.length) {
+    const primo = aggiungiMesi(oggi().slice(0, 7) + '-01', 1);
+    r.push('BEGIN:VEVENT', 'UID:controllo-mensile@casamanager', `DTSTAMP:${stampa}`, `DTSTART;VALUE=DATE:${primo.replace(/-/g, '')}`,
+      `DTEND;VALUE=DATE:${aggiungiGiorni(primo, 1).replace(/-/g, '')}`, 'RRULE:FREQ=MONTHLY;COUNT=24',
+      'SUMMARY:CasaManager - controlla ritardi affitti e quote condominio',
+      'DESCRIPTION:Apri CasaManager > Scadenze per vedere gli eventuali ritardi del mese precedente.',
+      ...allarme('Controlla i ritardi su CasaManager', 'PT9H'), 'END:VEVENT');
+  }
   r.push('END:VCALENDAR');
   return r.map(piegaIcs).join('\r\n') + '\r\n';
 }
 
 function esportaCalendario() {
-  if (!vociScadenze().length) { avviso('Non ci sono scadenze da aggiungere.'); return; }
+  if (!vociScadenze().length && !db.immobili.length) { avviso('Non ci sono scadenze da aggiungere.'); return; }
   condividiFile('CasaManager-scadenze.ics', 'text/calendar', costruisciIcs());
 }
 
@@ -773,6 +885,7 @@ function importaCopia(file) {
       if (!dati || typeof dati !== 'object' || !TABELLE.some(t => Array.isArray(dati[t]))) throw new Error('formato');
       if (!confirm('Sostituire tutti i dati attuali con quelli della copia?')) return;
       db = normalizza(dati);
+      migra();
       salva();
       render();
       avviso('Copia ripristinata.');
@@ -781,6 +894,73 @@ function importaCopia(file) {
     }
   };
   lettore.readAsText(file);
+}
+
+/* =================== Report =================== */
+
+const TIPI_REPORT = [['affitti', 'Affitti ricevuti'], ['affittiVersati', 'Affitti versati'], ['condomini', 'Quote condominio ricevute'],
+  ['condominiVersati', 'Quote condominio versate'], ['depositi', 'Depositi cauzionali'], ['spese', 'Spese straordinarie (rate)'], ['tasse', 'Tasse'],
+  ['affittuari', 'Affittuari e contratti'], ['riunioni', 'Riunioni di condominio']];
+
+const csvCella = x => { const t = String(x == null ? '' : x); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+const giornoCsv = d => (d ? d.split('-').reverse().join('/') : '');
+const numeroCsv = n => (n == null ? '' : n.toFixed(2).replace('.', ','));
+const INTESTAZIONE_REPORT = ['Tipologia', 'Data', 'Mese di competenza', 'Immobile', 'Affittuario', 'Descrizione', 'Importo (€)', 'Stato', 'Note'];
+
+function righeReport(tipi) {
+  const R = [];
+  const nomeAff = id => (db.affittuari.find(x => x.id === id) || {}).nome || '';
+  const aggiungi = (ordine, tipologia, data, mese, immobileId, affittuario, descrizione, importo, statoRiga, note) =>
+    R.push({ ordine, data: data || '', riga: [tipologia, giornoCsv(data), mese ? fmtMese(mese) : '', nomeImmobile(immobileId), affittuario || '', descrizione || '',
+      numeroCsv(importo), statoRiga || '', note || ''] });
+  if (tipi.includes('affitti')) db.affitti.forEach(a => aggiungi(0, 'Affitto ricevuto', a.data, a.mese, a.immobileId, nomeAff(a.affittuarioId), '', a.importo, 'Incassato'));
+  if (tipi.includes('affittiVersati')) db.affittiVersati.forEach(a => aggiungi(1, 'Affitto versato', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagato'));
+  if (tipi.includes('condomini')) db.condomini.forEach(a => aggiungi(2, 'Quota condominio ricevuta', a.data, a.mese, a.immobileId, '', '', a.importo, 'Incassata'));
+  if (tipi.includes('condominiVersati')) db.condominiVersati.forEach(a => aggiungi(3, 'Quota condominio versata', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagata'));
+  if (tipi.includes('depositi')) {
+    db.depositi.forEach(d => {
+      const c = d.chiusura;
+      aggiungi(4, d.tipo === 'versato' ? 'Deposito cauzionale versato' : 'Deposito cauzionale incassato', d.data, '', d.immobileId, nomeAff(d.affittuarioId), '', d.importo,
+        c ? 'Chiuso' : 'Aperto', c ? `Chiuso il ${giornoCsv(c.data)}: restituito ${numeroCsv(c.restituito)}, ${d.tipo === 'incassato' ? 'trattenuto' : 'non restituito'} ${numeroCsv(c.trattenuto)}` : '');
+    });
+  }
+  if (tipi.includes('spese')) {
+    db.spese.forEach(sp => {
+      const rate = speseRate(sp.id);
+      rate.forEach(r => aggiungi(5, 'Spesa straordinaria', r.scadenza, '', sp.immobileId, '', sp.descrizione + (rate.length > 1 ? ` - rata ${r.numero}/${rate.length}` : ''), r.importo,
+        r.pagata ? 'Pagata' : 'Da pagare', r.pagata ? `Pagata il ${giornoCsv(r.dataPagamento)}` : ''));
+    });
+  }
+  if (tipi.includes('tasse')) db.tasse.forEach(t => aggiungi(6, 'Tassa', t.scadenza, '', t.immobileId, '', t.descrizione, t.importo, t.pagata ? 'Pagata' : 'Da pagare', t.pagata ? `Pagata il ${giornoCsv(t.dataPagamento)}` : ''));
+  if (tipi.includes('affittuari')) {
+    db.affittuari.forEach(a => aggiungi(7, 'Affittuario', a.inizio, '', a.immobileId, a.nome, `Contratto dal ${giornoCsv(a.inizio)} al ${giornoCsv(a.fine)}`, null,
+      a.inizio > oggi() ? 'Futuro' : a.fine < oggi() ? 'Terminato' : 'In corso'));
+  }
+  if (tipi.includes('riunioni')) db.riunioni.forEach(r => aggiungi(8, 'Riunione di condominio', r.data.slice(0, 10), '', r.immobileId, '', 'Ore ' + r.data.slice(11, 16), null, '', r.note));
+  return R.sort((a, b) => a.ordine - b.ordine || a.data.localeCompare(b.data)).map(r => r.riga);
+}
+
+function costruisciCsv(tipi) {
+  const righe = [INTESTAZIONE_REPORT, ...righeReport(tipi)];
+  return '﻿' + righe.map(r => r.map(csvCella).join(';')).join('\r\n') + '\r\n';
+}
+
+function apriReport() {
+  const scelti = new Set(TIPI_REPORT.map(t => t[0]));
+  const corpo = h('div', { class: 'vista' });
+  const disegna = () => {
+    const n = righeReport([...scelti]).length;
+    const tutti = scelti.size === TIPI_REPORT.length;
+    corpo.replaceChildren(
+      h('div', { class: 'gruppo' }, TIPI_REPORT.map(([k, t]) => h('label', { class: 'riga-sel' }, h('span', {}, t),
+        h('input', { type: 'checkbox', class: 'interruttore', role: 'switch', checked: scelti.has(k), onchange: e => { if (e.target.checked) scelti.add(k); else scelti.delete(k); disegna(); } })))),
+      h('button', { class: 'link', onclick: () => { if (tutti) scelti.clear(); else TIPI_REPORT.forEach(t => scelti.add(t[0])); disegna(); } }, tutti ? 'Deseleziona tutto' : 'Seleziona tutto'),
+      h('p', { class: 'nota' }, n === 1 ? '1 riga nel report' : `${n} righe nel report`),
+      h('button', { class: 'btn primario pieno', disabled: n === 0, onclick: () => condividiFile(`CasaManager-report-${oggi()}.csv`, 'text/csv', costruisciCsv([...scelti])) }, 'Crea il report (file CSV)'),
+      h('p', { class: 'nota' }, 'Il file si apre con Numbers, Excel o Fogli Google, e contiene tutte le registrazioni delle tipologie scelte, in ordine di tipologia e di data.'));
+  };
+  apriFoglio('Report dei dati', corpo, { sinistra: 'Chiudi' });
+  disegna();
 }
 
 /* =================== Viste =================== */
@@ -809,13 +989,59 @@ function rigaScadenza(v) {
     h('button', { class: 'chip', onclick: () => completa(v) }, lettura ? v.fatto : 'Pagata'));
 }
 
+function registraRitardo(r) {
+  if (r.tipo === 'affitto') moduloAffitto(null, { immobileId: r.immobileId, affittuarioId: r.affittuarioId, mese: r.mese,
+    importo: ultimoImporto('affitti', x => x.affittuarioId === r.affittuarioId) });
+  else if (r.tipo === 'condominio') moduloCondominio(null, { immobileId: r.immobileId, mese: r.mese,
+    importo: ultimoImporto('condomini', x => x.immobileId === r.immobileId) });
+  else {
+    const q = db.condomini.find(x => x.id === r.quotaId);
+    moduloVersamento('condominio', null, { immobileId: r.immobileId, mese: r.mese, importo: q ? testoImporto(q.importo) : '' });
+  }
+}
+
+function apriRitardi() {
+  const elenco = ritardi();
+  const corpo = h('div', { class: 'vista' });
+  let fg;
+  [['affitto', 'Affitti non ricevuti'], ['condominio', 'Quote condominio non ricevute'], ['nonVersata', 'Quote condominio ricevute e non versate']].forEach(([k, titolo]) => {
+    const e = elenco.filter(r => r.tipo === k);
+    if (!e.length) return;
+    corpo.append(h('div', { class: 'sezione' }, h('h2', {}, titolo), h('div', { class: 'gruppo' }, e.map(r =>
+      h('div', { class: 'riga' },
+        h('div', { class: 'riga-main' }, h('div', { class: 'testi' }, h('div', { class: 't1' }, r.titolo), h('div', { class: 't2' }, r.dettaglio))),
+        h('button', { class: 'chip', onclick: () => { fg.chiudi(); registraRitardo(r); } }, 'Registra'))))));
+  });
+  if (!elenco.length) corpo.append(vuotoMsg('Nessun ritardo', 'Affitti e quote condominio dei mesi precedenti risultano regolari.'));
+  corpo.append(h('p', { class: 'nota' }, 'Il controllo riguarda i mesi precedenti a quello in corso. Per ogni affittuario puoi attivarlo o disattivarlo e scegliere da quale mese partire (Immobili > immobile > affittuario).'));
+  fg = apriFoglio('Controllo ritardi', corpo, { sinistra: 'Chiudi' });
+}
+
+/* A inizio mese (alla prima apertura di ogni mese) mostra i ritardi, se ce ne sono. */
+function controlloMensile() {
+  const mese = meseCorrente();
+  let ultimo = null;
+  try { ultimo = localStorage.getItem('casamanager.controllo'); } catch (e) { /* archivio non disponibile */ }
+  if (ultimo === mese) return;
+  try { localStorage.setItem('casamanager.controllo', mese); } catch (e) { /* ignora */ }
+  if (db.immobili.length && ritardi().length) apriRitardi();
+}
+
 function vistaScadenze() {
   const nodo = h('div', { class: 'vista' });
   const azioni = db.immobili.length ? [h('button', { 'aria-label': 'Nuovo promemoria', onclick: () => moduloLettura() }, '＋')] : [];
   const voci = vociScadenze();
   if (!db.immobili.length) {
     nodo.append(vuotoMsg('Nessun immobile', 'Aggiungi il tuo primo immobile nella sezione Immobili.', ['Vai a Immobili', () => { stato.scheda = 'immobili'; render(); }]));
-  } else if (!voci.length) {
+    return { titolo: 'Scadenze', azioni, nodo };
+  }
+  const n = ritardi().length;
+  if (n) {
+    nodo.append(h('button', { class: 'allerta', onclick: apriRitardi }, h('span', { class: 'ico' }, '⚠️'),
+      h('div', { class: 'testi' }, h('div', { class: 't1' }, n === 1 ? '1 ritardo da controllare' : `${n} ritardi da controllare`),
+        h('div', { class: 't2' }, 'Affitti e quote condominio dei mesi precedenti')), h('span', { class: 'grigio' }, '›')));
+  }
+  if (!voci.length) {
     nodo.append(vuotoMsg('Nessuna scadenza', 'Tocca ＋ per aggiungere un promemoria (lettura gas o acqua, pagamento affitto). Le scadenze di tasse e rate compaiono qui automaticamente.'));
   } else {
     const t = oggi(), limite = aggiungiGiorni(t, 30);
@@ -823,9 +1049,9 @@ function vistaScadenze() {
       .forEach(([titolo, elenco]) => {
         if (elenco.length) nodo.append(h('div', { class: 'sezione' }, h('h2', {}, titolo), h('div', { class: 'gruppo' }, elenco.map(rigaScadenza))));
       });
-    nodo.append(h('button', { class: 'btn secondario pieno', onclick: esportaCalendario }, '📅 Aggiungi gli avvisi al Calendario'),
-      h('p', { class: 'nota' }, 'Crea gli eventi nel Calendario dell\'iPhone, con avviso 3 giorni prima e il giorno stesso alle 9:00. Rifallo dopo aver aggiunto nuove scadenze: non si creano duplicati.'));
   }
+  nodo.append(h('button', { class: 'btn secondario pieno', onclick: esportaCalendario }, '📅 Aggiungi gli avvisi al Calendario'),
+    h('p', { class: 'nota' }, 'Crea gli eventi nel Calendario dell\'iPhone, con avviso 3 giorni prima e il giorno stesso alle 9:00, e un promemoria il 1° di ogni mese per controllare i ritardi. Rifallo dopo aver aggiunto nuove scadenze: non si creano duplicati.'));
   return { titolo: 'Scadenze', azioni, nodo };
 }
 
@@ -845,7 +1071,7 @@ function rigaRegistro(v) {
       h('span', { class: 'ico' }, v.icona),
       h('div', { class: 'testi' }, h('div', { class: 't1' }, v.titolo), v.dettaglio && h('div', { class: 't2' }, v.dettaglio),
         v.stato && h('span', { class: 'etichetta ' + v.stato[1] }, v.stato[0])),
-      h('div', { class: 'destra' }, h('div', { class: 'importo ' + (v.deposito ? 'blu' : v.entrata ? 'entrata' : 'uscita') }, (v.deposito ? '' : v.entrata ? '+ ' : '− ') + eur(v.importo)),
+      h('div', { class: 'destra' }, h('div', { class: 'importo ' + ({ entrata: 'entrata', uscita: 'uscita' }[v.gruppo] || 'blu') }, (v.gruppo === 'deposito' ? '' : v.entrata ? '+ ' : '− ') + eur(v.importo)),
         h('div', { class: 't3' }, fmtGiorno(v.data)))));
 }
 
@@ -860,7 +1086,7 @@ function vistaRegistro() {
   const lista = h('div', { class: 'vista' });
   const disegnaLista = () => {
     const parole = semplifica(stato.ricerca).split(/\s+/).filter(Boolean);
-    const flusso = v => (v.deposito ? 'depositi' : v.entrata ? 'entrate' : 'uscite');
+    const flusso = v => ({ entrata: 'entrate', uscita: 'uscite', condominio: 'condominio', deposito: 'depositi' }[v.gruppo]);
     const voci = tutte.filter(v => (stato.filtro === 'tutti' || stato.filtro === flusso(v))
       && (!parole.length || parole.every(p => testoRicerca(v).includes(p))));
     if (!tutte.length) { lista.replaceChildren(vuotoMsg('Registro vuoto', 'Tocca ＋ per registrare affitti, quote condominio, spese straordinarie o tasse.')); return; }
@@ -871,7 +1097,7 @@ function vistaRegistro() {
       h('div', { class: 'sezione' }, h('h2', {}, fmtMese(m)),
         h('div', { class: 'gruppo' }, perMese[m].sort((a, b) => b.data.localeCompare(a.data)).map(rigaRegistro)))));
   };
-  const filtri = h('div', { class: 'segmenti' }, [['tutti', 'Tutti'], ['entrate', 'Entrate'], ['uscite', 'Uscite'], ['depositi', 'Depositi']].map(([k, t]) =>
+  const filtri = h('div', { class: 'segmenti' }, [['tutti', 'Tutti'], ['entrate', 'Entrate'], ['uscite', 'Uscite'], ['condominio', 'Condominio'], ['depositi', 'Depositi']].map(([k, t]) =>
     h('button', { class: stato.filtro === k ? 'attivo' : '', onclick: e => {
       stato.filtro = k; filtri.querySelectorAll('button').forEach(b => b.classList.toggle('attivo', b === e.currentTarget)); disegnaLista();
     } }, t)));
@@ -892,9 +1118,11 @@ function menuRegistra() {
   const velo = apriFoglio('Registra', corpo, { sinistra: 'Chiudi' });
 }
 
-const CATEGORIE = { affitti: 'Affitti ricevuti', condominio: 'Quote condominio ricevute', affittoVersato: 'Affitto versato', condominioVersato: 'Quote condominio versate', spese: 'Spese straordinarie', tasse: 'Tasse' };
-const CAT_ENTRATE = ['affitti', 'condominio'];
-const CAT_USCITE = ['affittoVersato', 'condominioVersato', 'spese', 'tasse'];
+const CATEGORIE = { affitti: 'Affitti ricevuti', cauzioneTrattenuta: 'Cauzioni trattenute', affittoVersato: 'Affitto versato',
+  cauzioneNonRestituita: 'Cauzioni non restituite', spese: 'Spese straordinarie', tasse: 'Tasse',
+  condominio: 'Quote condominio ricevute', condominioVersato: 'Quote condominio versate' };
+const CAT_ENTRATE = ['affitti', 'cauzioneTrattenuta'];
+const CAT_USCITE = ['affittoVersato', 'cauzioneNonRestituita', 'spese', 'tasse'];
 
 function grafico(punti) {
   const W = 360, H = 170, base = H - 6, alto = 14;
@@ -968,7 +1196,9 @@ function vistaBilancio() {
       u: delMese.filter(m => CAT_USCITE.includes(m.cat)).reduce((t, m) => t + m.importo, 0) };
   });
   // Depositi cauzionali: tracciati a parte, non fanno parte di entrate, costi e saldo.
-  const depositi = db.depositi.filter(d => inSel(d.immobileId));
+  const depositi = db.depositi.filter(d => !d.chiusura && inSel(d.immobileId));
+  const condRicevute = somma('condominio'), condVersate = somma('condominioVersato');
+  const haCondominio = mov.some(m => m.cat === 'condominio' || m.cat === 'condominioVersato');
   const sommaDep = tipo => depositi.filter(d => d.tipo === tipo).reduce((t, d) => t + d.importo, 0);
 
   const selAnno = h('select', { 'aria-label': 'Anno', onchange: e => { stato.anno = Number(e.target.value); render(); } },
@@ -990,13 +1220,18 @@ function vistaBilancio() {
         h('div', { class: 'leg' }, h('span', {}, h('i', { style: 'background:var(--verde)' }), 'Entrate'), h('span', {}, h('i', { style: 'background:var(--rosso)' }), 'Uscite')))) : null,
     h('div', { class: 'sezione' }, h('h2', {}, 'Entrate per categoria'), righe(CAT_ENTRATE)),
     h('div', { class: 'sezione' }, h('h2', {}, 'Costi per categoria'), righe(CAT_USCITE)),
-    depositi.length ? h('div', { class: 'sezione' }, h('h2', {}, 'Depositi cauzionali (non inclusi nei totali)'),
+    haCondominio ? h('div', { class: 'sezione' }, h('h2', {}, 'Quote condominio (non incluse in entrate e costi)'),
+      h('div', { class: 'gruppo' },
+        h('div', { class: 'voce-tot' }, h('span', {}, 'Ricevute'), h('span', { class: 'blu' }, eur(condRicevute))),
+        h('div', { class: 'voce-tot' }, h('span', {}, 'Versate'), h('span', { class: 'blu' }, eur(condVersate))),
+        h('div', { class: 'voce-tot' }, h('strong', {}, 'Differenza (ricevute − versate)'), h('strong', { class: 'blu' }, eur(condRicevute - condVersate))))) : null,
+    depositi.length ? h('div', { class: 'sezione' }, h('h2', {}, 'Depositi cauzionali aperti (non inclusi nei totali)'),
       h('div', { class: 'gruppo' },
         h('div', { class: 'voce-tot' }, h('span', {}, 'Versati (da riavere)'), h('span', { class: 'blu' }, eur(sommaDep('versato')))),
         h('div', { class: 'voce-tot' }, h('span', {}, 'Incassati (da restituire)'), h('span', { class: 'blu' }, eur(sommaDep('incassato'))))),
-      h('p', { class: 'nota' }, 'Tutti i depositi ancora registrati per gli immobili scelti, di qualsiasi anno. Non sono né entrate né costi: a fine contratto vengono restituiti o trattenuti.')) : null,
-    h('p', { class: 'nota' }, 'Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata). Affitti e quote condominio (ricevuti o versati) contano alla data di incasso/pagamento.'));
-  return { titolo: 'Bilancio', azioni: [], nodo };
+      h('p', { class: 'nota' }, 'Depositi non ancora chiusi, di qualsiasi anno. Non sono né entrate né costi: alla chiusura la parte trattenuta diventa entrata (incassato) o costo (versato).')) : null,
+    h('p', { class: 'nota' }, 'Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata). Affitti contano alla data di incasso/pagamento. Le quote condominio e i depositi cauzionali sono sempre a parte.'));
+  return { titolo: 'Bilancio', azioni: [h('button', { class: 'testo', onclick: apriReport }, 'Report')], nodo };
 }
 
 function vistaImmobili() {
@@ -1074,7 +1309,22 @@ function render() {
   $('main', app).scrollTop = scorri;
 }
 
+/* Prima apertura con questa versione: il controllo ritardi parte dal mese corrente, senza segnalare gli arretrati. */
+function migra() {
+  let cambiato = false;
+  if (!db.controlloDal) { db.controlloDal = meseCorrente(); cambiato = true; }
+  db.affittuari.forEach(a => {
+    if (!a.controlloDal) {
+      a.controlloDal = [a.inizio.slice(0, 7), meseCorrente()].sort().pop();
+      a.controlloAffitto = true; a.controlloCondominio = true; cambiato = true;
+    }
+  });
+  if (cambiato) salva();
+}
+
+migra();
 render();
+controlloMensile();
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => { /* funziona comunque, ma non offline */ });
