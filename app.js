@@ -5,7 +5,7 @@
 /* =================== Dati =================== */
 
 const CHIAVE = 'casamanager.dati.v1';
-const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'spese', 'rate', 'tasse', 'causali', 'riunioni', 'letture'];
+const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'spese', 'rate', 'tasse', 'bollette', 'causali', 'riunioni', 'letture'];
 const CAUSALI_BASE = ['Prima rata IMU', 'Seconda rata IMU', 'Saldo IMU', 'TARI', 'Imposta di registro', 'Cedolare secca'];
 const nuovoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
@@ -141,7 +141,7 @@ const speseRate = spesaId => db.rate.filter(r => r.spesaId === spesaId).sort((a,
 
 function eliminaImmobile(id) {
   db.immobili = db.immobili.filter(x => x.id !== id);
-  ['affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'tasse', 'riunioni', 'letture'].forEach(t => {
+  ['affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'tasse', 'bollette', 'riunioni', 'letture'].forEach(t => {
     db[t] = db[t].filter(x => x.immobileId !== id);
   });
   const spese = db.spese.filter(s => s.immobileId === id).map(s => s.id);
@@ -164,6 +164,9 @@ function eliminaAffittuario(id) {
 }
 
 /* ----- Scadenziario ----- */
+
+const ICONE_BOLLETTE = { Acqua: '💧', Luce: '💡', Gas: '🔥', Telefono: '📞' };
+const titoloBolletta = b => `Bolletta ${b.tipo.toLowerCase()}` + (b.periodo ? ' ' + b.periodo : '');
 
 const PROMEMORIA = {
   Gas: { titolo: 'Lettura gas', icona: '🔥', fatto: 'Fatta' },
@@ -188,6 +191,11 @@ function vociScadenze() {
     voci.push({ tipo: 'tassa', id: t.id, data: t.scadenza, icona: '🏛️', titolo: t.descrizione,
       immobile: nomeImmobile(t.immobileId), importo: t.importo });
   }
+  for (const b of db.bollette) {
+    if (b.pagata) continue;
+    voci.push({ tipo: 'bolletta', id: b.id, data: b.scadenza, icona: ICONE_BOLLETTE[b.tipo] || '🧾', titolo: titoloBolletta(b),
+      immobile: nomeImmobile(b.immobileId), importo: b.importo });
+  }
   for (const l of db.letture) {
     const p = PROMEMORIA[l.contatore] || PROMEMORIA.Gas;
     voci.push({ tipo: 'lettura', id: l.id, data: l.prossima, icona: p.icona, fatto: p.fatto,
@@ -203,6 +211,9 @@ function completa(v) {
   } else if (v.tipo === 'tassa') {
     const t = db.tasse.find(x => x.id === v.id);
     t.pagata = true; t.dataPagamento = oggi();
+  } else if (v.tipo === 'bolletta') {
+    const b = db.bollette.find(x => x.id === v.id);
+    b.pagata = true; b.dataPagamento = oggi();
   } else {
     const l = db.letture.find(x => x.id === v.id);
     const passo = Math.max(1, l.ogniMesi);
@@ -258,6 +269,11 @@ function vociRegistro() {
     voci.push({ k: 'spesa', id: s.id, gruppo: 'uscita', entrata: false, data: s.data, importo: s.totale, icona: '🔨', categoria: 'Spesa straordinaria',
       titolo: s.descrizione, dettaglio: nomeImmobile(s.immobileId), stato });
   }
+  for (const b of db.bollette) {
+    voci.push({ k: 'bolletta', id: b.id, gruppo: 'uscita', entrata: false, data: b.pagata ? (b.dataPagamento || b.scadenza) : b.scadenza, importo: b.importo,
+      icona: ICONE_BOLLETTE[b.tipo] || '🧾', categoria: 'Bolletta ' + b.tipo, titolo: titoloBolletta(b), dettaglio: nomeImmobile(b.immobileId),
+      stato: b.pagata ? ['Pagata', 'verde'] : ['Da pagare', 'arancio'] });
+  }
   for (const t of db.tasse) {
     voci.push({ k: 'tassa', id: t.id, gruppo: 'uscita', entrata: false, data: t.pagata ? (t.dataPagamento || t.scadenza) : t.scadenza,
       importo: t.importo, icona: '🏛️', categoria: 'Tassa', titolo: t.descrizione, dettaglio: nomeImmobile(t.immobileId),
@@ -287,6 +303,7 @@ function movimentiEffettivi() {
     m.push({ data: r.dataPagamento || r.scadenza, importo: r.importo, cat: 'spese', immobileId: s ? s.immobileId : '' });
   });
   db.tasse.filter(t => t.pagata).forEach(t => m.push({ data: t.dataPagamento || t.scadenza, importo: t.importo, cat: 'tasse', immobileId: t.immobileId }));
+  db.bollette.filter(b => b.pagata).forEach(b => m.push({ data: b.dataPagamento || b.scadenza, importo: b.importo, cat: 'bollette', immobileId: b.immobileId }));
   return m;
 }
 
@@ -730,6 +747,35 @@ function dettaglioSpesa(id) {
   disegna();
 }
 
+function moduloBolletta(esistente) {
+  apriModulo({
+    titolo: esistente ? 'Modifica bolletta' : 'Bolletta',
+    valori: {
+      tipo: esistente ? esistente.tipo : 'Luce', immobileId: esistente ? esistente.immobileId : immobilePredefinito(),
+      periodo: esistente ? esistente.periodo || '' : '', importo: esistente ? testoImporto(esistente.importo) : '',
+      scadenza: esistente ? esistente.scadenza : oggi(), pagata: esistente ? esistente.pagata : false,
+      dataPagamento: esistente && esistente.dataPagamento ? esistente.dataPagamento : oggi(), id: esistente && esistente.id
+    },
+    campi: [
+      { n: 'tipo', l: 'Tipo', t: 'segmenti', opts: ['Acqua', 'Luce', 'Gas', 'Telefono'] },
+      { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
+      { n: 'periodo', l: 'Periodo (facoltativo)', t: 'testo', ph: 'es. Ottobre-Novembre 2026' },
+      { n: 'importo', l: 'Importo', t: 'importo' },
+      { n: 'scadenza', l: 'Scadenza', t: 'data' },
+      { n: 'pagata', l: 'Già pagata', t: 'interruttore' },
+      { n: 'dataPagamento', l: 'Data pagamento', t: 'data', show: v => v.pagata }
+    ],
+    valido: v => v.tipo && v.immobileId && (leggiImporto(v.importo) || 0) > 0 && v.scadenza && (!v.pagata || v.dataPagamento),
+    salva: v => {
+      const dati = { tipo: v.tipo, immobileId: v.immobileId, periodo: v.periodo.trim(), importo: leggiImporto(v.importo), scadenza: v.scadenza,
+        pagata: v.pagata, dataPagamento: v.pagata ? v.dataPagamento : '' };
+      if (esistente) Object.assign(esistente, dati); else db.bollette.push(Object.assign({ id: nuovoId() }, dati));
+    },
+    elimina: esistente ? () => { db.bollette = db.bollette.filter(x => x.id !== esistente.id); salva(); } : null,
+    conferma: 'Eliminare questa bolletta?'
+  });
+}
+
 const ALTRO = '__altro';
 const causaliOrdinate = () => db.causali.slice().sort((a, b) => a.testo.localeCompare(b.testo, 'it'));
 
@@ -899,7 +945,7 @@ function importaCopia(file) {
 /* =================== Report =================== */
 
 const TIPI_REPORT = [['affitti', 'Affitti ricevuti'], ['affittiVersati', 'Affitti versati'], ['condomini', 'Quote condominio ricevute'],
-  ['condominiVersati', 'Quote condominio versate'], ['depositi', 'Depositi cauzionali'], ['spese', 'Spese straordinarie (rate)'], ['tasse', 'Tasse'],
+  ['condominiVersati', 'Quote condominio versate'], ['depositi', 'Depositi cauzionali'], ['spese', 'Spese straordinarie (rate)'], ['tasse', 'Tasse'], ['bollette', 'Bollette'],
   ['affittuari', 'Affittuari e contratti'], ['riunioni', 'Riunioni di condominio']];
 
 const csvCella = x => { const t = String(x == null ? '' : x); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
@@ -932,6 +978,10 @@ function righeReport(tipi) {
     });
   }
   if (tipi.includes('tasse')) db.tasse.forEach(t => aggiungi(6, 'Tassa', t.scadenza, '', t.immobileId, '', t.descrizione, t.importo, t.pagata ? 'Pagata' : 'Da pagare', t.pagata ? `Pagata il ${giornoCsv(t.dataPagamento)}` : ''));
+  if (tipi.includes('bollette')) {
+    db.bollette.forEach(b => aggiungi(6.5, 'Bolletta ' + b.tipo.toLowerCase(), b.scadenza, '', b.immobileId, '', b.periodo || '', b.importo,
+      b.pagata ? 'Pagata' : 'Da pagare', b.pagata ? `Pagata il ${giornoCsv(b.dataPagamento)}` : ''));
+  }
   if (tipi.includes('affittuari')) {
     db.affittuari.forEach(a => aggiungi(7, 'Affittuario', a.inizio, '', a.immobileId, a.nome, `Contratto dal ${giornoCsv(a.inizio)} al ${giornoCsv(a.fine)}`, null,
       a.inizio > oggi() ? 'Futuro' : a.fine < oggi() ? 'Terminato' : 'In corso'));
@@ -978,6 +1028,7 @@ function rigaScadenza(v) {
   const apri = () => {
     if (v.tipo === 'lettura') moduloLettura(db.letture.find(x => x.id === v.id));
     else if (v.tipo === 'tassa') moduloTassa(db.tasse.find(x => x.id === v.id));
+    else if (v.tipo === 'bolletta') moduloBolletta(db.bollette.find(x => x.id === v.id));
     else dettaglioSpesa(v.spesaId);
   };
   return h('div', { class: 'riga' },
@@ -1061,6 +1112,7 @@ function apriVoceRegistro(v) {
   else if (v.k === 'affittoVersato') moduloVersamento('affitto', db.affittiVersati.find(x => x.id === v.id));
   else if (v.k === 'condominioVersato') moduloVersamento('condominio', db.condominiVersati.find(x => x.id === v.id));
   else if (v.k === 'deposito') { const d = db.depositi.find(x => x.id === v.id); moduloDeposito(d.tipo, d); }
+  else if (v.k === 'bolletta') moduloBolletta(db.bollette.find(x => x.id === v.id));
   else if (v.k === 'spesa') dettaglioSpesa(v.id);
   else moduloTassa(db.tasse.find(x => x.id === v.id));
 }
@@ -1112,17 +1164,17 @@ function menuRegistra() {
   const scelte = [['🏠', 'Affitto ricevuto', () => moduloAffitto()], ['🏢', 'Quota condominio ricevuta', () => moduloCondominio()],
     ['🏠', 'Affitto versato', () => moduloVersamento('affitto')], ['🏢', 'Quota condominio versata', () => moduloVersamento('condominio')],
     ['🔑', 'Deposito cauzionale versato', () => moduloDeposito('versato')], ['🔑', 'Deposito cauzionale incassato', () => moduloDeposito('incassato')],
-    ['🔨', 'Spesa straordinaria', moduloSpesa], ['🏛️', 'Tassa', () => moduloTassa()]];
+    ['💡', 'Bolletta (acqua, luce, gas, telefono)', () => moduloBolletta()], ['🔨', 'Spesa straordinaria', moduloSpesa], ['🏛️', 'Tassa', () => moduloTassa()]];
   const corpo = h('div', { class: 'gruppo' }, scelte.map(([i, t, f]) =>
     h('button', { class: 'scelta-voce', onclick: () => { velo.chiudi(); f(); } }, h('span', {}, i), t)));
   const velo = apriFoglio('Registra', corpo, { sinistra: 'Chiudi' });
 }
 
 const CATEGORIE = { affitti: 'Affitti ricevuti', cauzioneTrattenuta: 'Cauzioni trattenute', affittoVersato: 'Affitto versato',
-  cauzioneNonRestituita: 'Cauzioni non restituite', spese: 'Spese straordinarie', tasse: 'Tasse',
+  cauzioneNonRestituita: 'Cauzioni non restituite', spese: 'Spese straordinarie', tasse: 'Tasse', bollette: 'Bollette',
   condominio: 'Quote condominio ricevute', condominioVersato: 'Quote condominio versate' };
 const CAT_ENTRATE = ['affitti', 'cauzioneTrattenuta'];
-const CAT_USCITE = ['affittoVersato', 'cauzioneNonRestituita', 'spese', 'tasse'];
+const CAT_USCITE = ['affittoVersato', 'cauzioneNonRestituita', 'spese', 'tasse', 'bollette'];
 
 function grafico(punti) {
   const W = 360, H = 170, base = H - 6, alto = 14;
@@ -1230,7 +1282,7 @@ function vistaBilancio() {
         h('div', { class: 'voce-tot' }, h('span', {}, 'Versati (da riavere)'), h('span', { class: 'blu' }, eur(sommaDep('versato')))),
         h('div', { class: 'voce-tot' }, h('span', {}, 'Incassati (da restituire)'), h('span', { class: 'blu' }, eur(sommaDep('incassato'))))),
       h('p', { class: 'nota' }, 'Depositi non ancora chiusi, di qualsiasi anno. Non sono né entrate né costi: alla chiusura la parte trattenuta diventa entrata (incassato) o costo (versato).')) : null,
-    h('p', { class: 'nota' }, 'Spese e tasse contano come costo solo quando sono segnate "Pagata" (rata per rata). Affitti contano alla data di incasso/pagamento. Le quote condominio e i depositi cauzionali sono sempre a parte.'));
+    h('p', { class: 'nota' }, 'Spese, tasse e bollette contano come costo solo quando sono segnate "Pagata" (rata per rata). Affitti contano alla data di incasso/pagamento. Le quote condominio e i depositi cauzionali sono sempre a parte.'));
   return { titolo: 'Bilancio', azioni: [h('button', { class: 'testo', onclick: apriReport }, 'Report')], nodo };
 }
 
