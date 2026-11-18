@@ -4,6 +4,7 @@
 
 /* =================== Dati =================== */
 
+const VERSIONE = '2026.11.18';
 const CHIAVE = 'casamanager.dati.v1';
 const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'spese', 'rate', 'tasse', 'bollette', 'causali', 'riunioni', 'letture'];
 const CAUSALI_BASE = ['Prima rata IMU', 'Seconda rata IMU', 'Saldo IMU', 'TARI', 'Imposta di registro', 'Cedolare secca'];
@@ -238,24 +239,24 @@ function vociRegistro() {
   const voci = [];
   for (const a of db.affitti) {
     const inq = db.affittuari.find(x => x.id === a.affittuarioId);
-    voci.push({ k: 'affitto', id: a.id, gruppo: 'entrata', entrata: true, data: a.data, importo: a.importo, icona: '🏠', categoria: 'Affitto',
+    voci.push({ k: 'affitto', id: a.id, immobileId: a.immobileId, competenza: a.mese, gruppo: 'entrata', entrata: true, data: a.data, importo: a.importo, icona: '🏠', categoria: 'Affitto',
       titolo: `Affitto ${fmtMese(a.mese)}`, dettaglio: [nomeImmobile(a.immobileId), inq ? inq.nome : ''].filter(Boolean).join(' · ') });
   }
   for (const q of db.affittiVersati) {
-    voci.push({ k: 'affittoVersato', id: q.id, gruppo: 'uscita', entrata: false, data: q.data, importo: q.importo, icona: '🏠', categoria: 'Affitto versato',
+    voci.push({ k: 'affittoVersato', id: q.id, immobileId: q.immobileId, competenza: q.mese, gruppo: 'uscita', entrata: false, data: q.data, importo: q.importo, icona: '🏠', categoria: 'Affitto versato',
       titolo: `Affitto versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId) });
   }
   for (const q of db.condomini) {
-    voci.push({ k: 'condominio', id: q.id, gruppo: 'condominio', entrata: true, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
+    voci.push({ k: 'condominio', id: q.id, immobileId: q.immobileId, competenza: q.mese, gruppo: 'condominio', entrata: true, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
       titolo: `Condominio ricevuto ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId), stato: ['Non incluso in entrate/uscite', 'blu'] });
   }
   for (const q of db.condominiVersati) {
-    voci.push({ k: 'condominioVersato', id: q.id, gruppo: 'condominio', entrata: false, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
+    voci.push({ k: 'condominioVersato', id: q.id, immobileId: q.immobileId, competenza: q.mese, gruppo: 'condominio', entrata: false, data: q.data, importo: q.importo, icona: '🏢', categoria: 'Condominio',
       titolo: `Condominio versato ${fmtMese(q.mese)}`, dettaglio: nomeImmobile(q.immobileId), stato: ['Non incluso in entrate/uscite', 'blu'] });
   }
   for (const d of db.depositi) {
     const inq = db.affittuari.find(x => x.id === d.affittuarioId);
-    voci.push({ k: 'deposito', id: d.id, gruppo: 'deposito', data: d.data, importo: d.importo, icona: '🔑', categoria: 'Deposito cauzionale',
+    voci.push({ k: 'deposito', id: d.id, immobileId: d.immobileId, gruppo: 'deposito', data: d.data, importo: d.importo, icona: '🔑', categoria: 'Deposito cauzionale',
       titolo: d.tipo === 'versato' ? 'Deposito cauzionale versato' : 'Deposito cauzionale incassato',
       dettaglio: [nomeImmobile(d.immobileId), inq ? inq.nome : ''].filter(Boolean).join(' · '), stato: statoDeposito(d) });
   }
@@ -266,16 +267,16 @@ function vociRegistro() {
     if (rate.length && pagate === rate.length) stato = ['Pagata', 'verde'];
     else if (rate.length > 1) stato = [`${pagate} di ${rate.length} rate pagate`, 'arancio'];
     else stato = ['Da pagare', 'arancio'];
-    voci.push({ k: 'spesa', id: s.id, gruppo: 'uscita', entrata: false, data: s.data, importo: s.totale, icona: '🔨', categoria: 'Spesa straordinaria',
+    voci.push({ k: 'spesa', id: s.id, immobileId: s.immobileId, gruppo: 'uscita', entrata: false, data: s.data, importo: s.totale, icona: '🔨', categoria: 'Spesa straordinaria',
       titolo: s.descrizione, dettaglio: nomeImmobile(s.immobileId), stato });
   }
   for (const b of db.bollette) {
-    voci.push({ k: 'bolletta', id: b.id, gruppo: 'uscita', entrata: false, data: b.pagata ? (b.dataPagamento || b.scadenza) : b.scadenza, importo: b.importo,
+    voci.push({ k: 'bolletta', id: b.id, immobileId: b.immobileId, gruppo: 'uscita', entrata: false, data: b.pagata ? (b.dataPagamento || b.scadenza) : b.scadenza, importo: b.importo,
       icona: ICONE_BOLLETTE[b.tipo] || '🧾', categoria: 'Bolletta ' + b.tipo, titolo: titoloBolletta(b), dettaglio: nomeImmobile(b.immobileId),
       stato: b.pagata ? ['Pagata', 'verde'] : ['Da pagare', 'arancio'] });
   }
   for (const t of db.tasse) {
-    voci.push({ k: 'tassa', id: t.id, gruppo: 'uscita', entrata: false, data: t.pagata ? (t.dataPagamento || t.scadenza) : t.scadenza,
+    voci.push({ k: 'tassa', id: t.id, immobileId: t.immobileId, gruppo: 'uscita', entrata: false, data: t.pagata ? (t.dataPagamento || t.scadenza) : t.scadenza,
       importo: t.importo, icona: '🏛️', categoria: 'Tassa', titolo: t.descrizione, dettaglio: nomeImmobile(t.immobileId),
       stato: t.pagata ? ['Pagata', 'verde'] : ['Da pagare', 'arancio'] });
   }
@@ -347,7 +348,7 @@ function ritardi() {
 
 /* =================== Interfaccia: strumenti =================== */
 
-const stato = { scheda: 'scadenze', filtro: 'tutti', ricerca: '', anno: new Date().getFullYear(), immBilancio: [], dettaglio: null };
+const stato = { scheda: 'scadenze', filtro: 'tutti', ricerca: '', anno: new Date().getFullYear(), immBilancio: [], immReport: [], annoReport: '', dettaglio: null };
 
 function vuotoMsg(titolo, testo, azione) {
   return h('div', { class: 'vuoto' }, h('h3', {}, titolo), h('p', {}, testo),
@@ -953,61 +954,244 @@ const giornoCsv = d => (d ? d.split('-').reverse().join('/') : '');
 const numeroCsv = n => (n == null ? '' : n.toFixed(2).replace('.', ','));
 const INTESTAZIONE_REPORT = ['Tipologia', 'Data', 'Mese di competenza', 'Immobile', 'Affittuario', 'Descrizione', 'Importo (€)', 'Stato', 'Note'];
 
-function righeReport(tipi) {
+function datiReport(tipi, filtro) {
+  filtro = filtro || {};
   const R = [];
   const nomeAff = id => (db.affittuari.find(x => x.id === id) || {}).nome || '';
-  const aggiungi = (ordine, tipologia, data, mese, immobileId, affittuario, descrizione, importo, statoRiga, note) =>
-    R.push({ ordine, data: data || '', riga: [tipologia, giornoCsv(data), mese ? fmtMese(mese) : '', nomeImmobile(immobileId), affittuario || '', descrizione || '',
-      numeroCsv(importo), statoRiga || '', note || ''] });
-  if (tipi.includes('affitti')) db.affitti.forEach(a => aggiungi(0, 'Affitto ricevuto', a.data, a.mese, a.immobileId, nomeAff(a.affittuarioId), '', a.importo, 'Incassato'));
-  if (tipi.includes('affittiVersati')) db.affittiVersati.forEach(a => aggiungi(1, 'Affitto versato', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagato'));
-  if (tipi.includes('condomini')) db.condomini.forEach(a => aggiungi(2, 'Quota condominio ricevuta', a.data, a.mese, a.immobileId, '', '', a.importo, 'Incassata'));
-  if (tipi.includes('condominiVersati')) db.condominiVersati.forEach(a => aggiungi(3, 'Quota condominio versata', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagata'));
+  const aggiungi = (chiave, tipologia, data, mese, immobileId, affittuario, descrizione, importo, statoRiga, note, anni) =>
+    R.push({ chiave, ordine: TIPI_REPORT.findIndex(t => t[0] === chiave), tipologia, data: data || '', mese: mese || '', immobileId, immobile: nomeImmobile(immobileId),
+      affittuario: affittuario || '', descrizione: descrizione || '', importo: importo == null ? null : importo, stato: statoRiga || '', note: note || '',
+      anno: (mese || data || '').slice(0, 4), anni: anni || null });
+  if (tipi.includes('affitti')) db.affitti.forEach(a => aggiungi('affitti', 'Affitto ricevuto', a.data, a.mese, a.immobileId, nomeAff(a.affittuarioId), '', a.importo, 'Incassato'));
+  if (tipi.includes('affittiVersati')) db.affittiVersati.forEach(a => aggiungi('affittiVersati', 'Affitto versato', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagato'));
+  if (tipi.includes('condomini')) db.condomini.forEach(a => aggiungi('condomini', 'Quota condominio ricevuta', a.data, a.mese, a.immobileId, '', '', a.importo, 'Incassata'));
+  if (tipi.includes('condominiVersati')) db.condominiVersati.forEach(a => aggiungi('condominiVersati', 'Quota condominio versata', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagata'));
   if (tipi.includes('depositi')) {
     db.depositi.forEach(d => {
       const c = d.chiusura;
-      aggiungi(4, d.tipo === 'versato' ? 'Deposito cauzionale versato' : 'Deposito cauzionale incassato', d.data, '', d.immobileId, nomeAff(d.affittuarioId), '', d.importo,
+      aggiungi('depositi', d.tipo === 'versato' ? 'Deposito cauzionale versato' : 'Deposito cauzionale incassato', d.data, '', d.immobileId, nomeAff(d.affittuarioId), '', d.importo,
         c ? 'Chiuso' : 'Aperto', c ? `Chiuso il ${giornoCsv(c.data)}: restituito ${numeroCsv(c.restituito)}, ${d.tipo === 'incassato' ? 'trattenuto' : 'non restituito'} ${numeroCsv(c.trattenuto)}` : '');
     });
   }
   if (tipi.includes('spese')) {
     db.spese.forEach(sp => {
       const rate = speseRate(sp.id);
-      rate.forEach(r => aggiungi(5, 'Spesa straordinaria', r.scadenza, '', sp.immobileId, '', sp.descrizione + (rate.length > 1 ? ` - rata ${r.numero}/${rate.length}` : ''), r.importo,
+      rate.forEach(r => aggiungi('spese', 'Spesa straordinaria', r.scadenza, '', sp.immobileId, '', sp.descrizione + (rate.length > 1 ? ` - rata ${r.numero}/${rate.length}` : ''), r.importo,
         r.pagata ? 'Pagata' : 'Da pagare', r.pagata ? `Pagata il ${giornoCsv(r.dataPagamento)}` : ''));
     });
   }
-  if (tipi.includes('tasse')) db.tasse.forEach(t => aggiungi(6, 'Tassa', t.scadenza, '', t.immobileId, '', t.descrizione, t.importo, t.pagata ? 'Pagata' : 'Da pagare', t.pagata ? `Pagata il ${giornoCsv(t.dataPagamento)}` : ''));
+  if (tipi.includes('tasse')) db.tasse.forEach(t => aggiungi('tasse', 'Tassa', t.scadenza, '', t.immobileId, '', t.descrizione, t.importo, t.pagata ? 'Pagata' : 'Da pagare', t.pagata ? `Pagata il ${giornoCsv(t.dataPagamento)}` : ''));
   if (tipi.includes('bollette')) {
-    db.bollette.forEach(b => aggiungi(6.5, 'Bolletta ' + b.tipo.toLowerCase(), b.scadenza, '', b.immobileId, '', b.periodo || '', b.importo,
+    db.bollette.forEach(b => aggiungi('bollette', 'Bolletta ' + b.tipo.toLowerCase(), b.scadenza, '', b.immobileId, '', b.periodo || '', b.importo,
       b.pagata ? 'Pagata' : 'Da pagare', b.pagata ? `Pagata il ${giornoCsv(b.dataPagamento)}` : ''));
   }
   if (tipi.includes('affittuari')) {
-    db.affittuari.forEach(a => aggiungi(7, 'Affittuario', a.inizio, '', a.immobileId, a.nome, `Contratto dal ${giornoCsv(a.inizio)} al ${giornoCsv(a.fine)}`, null,
-      a.inizio > oggi() ? 'Futuro' : a.fine < oggi() ? 'Terminato' : 'In corso'));
+    db.affittuari.forEach(a => aggiungi('affittuari', 'Affittuario', a.inizio, '', a.immobileId, a.nome, `Contratto dal ${giornoCsv(a.inizio)} al ${giornoCsv(a.fine)}`, null,
+      a.inizio > oggi() ? 'Futuro' : a.fine < oggi() ? 'Terminato' : 'In corso', '', [a.inizio.slice(0, 4), a.fine.slice(0, 4)]));
   }
-  if (tipi.includes('riunioni')) db.riunioni.forEach(r => aggiungi(8, 'Riunione di condominio', r.data.slice(0, 10), '', r.immobileId, '', 'Ore ' + r.data.slice(11, 16), null, '', r.note));
-  return R.sort((a, b) => a.ordine - b.ordine || a.data.localeCompare(b.data)).map(r => r.riga);
+  if (tipi.includes('riunioni')) db.riunioni.forEach(r => aggiungi('riunioni', 'Riunione di condominio', r.data.slice(0, 10), '', r.immobileId, '', 'Ore ' + r.data.slice(11, 16), null, '', r.note));
+  return R.filter(r => (!filtro.anno || (r.anni ? r.anni[0] <= filtro.anno && filtro.anno <= r.anni[1] : r.anno === filtro.anno))
+      && (!filtro.immobili || !filtro.immobili.length || filtro.immobili.includes(r.immobileId)))
+    .sort((a, b) => a.ordine - b.ordine || a.data.localeCompare(b.data));
 }
 
-function costruisciCsv(tipi) {
-  const righe = [INTESTAZIONE_REPORT, ...righeReport(tipi)];
+function costruisciCsv(tipi, filtro) {
+  const righe = [INTESTAZIONE_REPORT, ...datiReport(tipi, filtro).map(r => [r.tipologia, giornoCsv(r.data), r.mese ? fmtMese(r.mese) : '', r.immobile, r.affittuario,
+    r.descrizione, numeroCsv(r.importo), r.stato, r.note])];
   return '﻿' + righe.map(r => r.map(csvCella).join(';')).join('\r\n') + '\r\n';
+}
+
+/* ----- Generatore PDF minimale (Helvetica, A4 orizzontale): nessuna libreria esterna, funziona offline ----- */
+
+// Larghezze Helvetica (millesimi di em) per i caratteri ASCII 32..126
+const LARGH_HELV = [278, 278, 355, 556, 556, 889, 667, 191, 333, 333, 389, 584, 278, 333, 278, 278, 556, 556, 556, 556, 556, 556, 556, 556, 556, 556,
+  278, 278, 584, 584, 584, 556, 1015, 667, 667, 722, 722, 667, 611, 778, 722, 278, 500, 667, 556, 833, 722, 778, 667, 778, 722, 667, 611, 722, 667, 944,
+  667, 667, 611, 278, 278, 278, 469, 556, 333, 556, 556, 500, 556, 556, 278, 556, 556, 222, 222, 500, 222, 833, 556, 556, 556, 556, 333, 500, 278, 556,
+  500, 722, 500, 500, 500, 334, 260, 334, 584];
+
+function larghezzaTesto(t, size, grassetto) {
+  let w = 0;
+  for (const ch of String(t)) {
+    const c = ch.codePointAt(0);
+    w += c >= 32 && c <= 126 ? LARGH_HELV[c - 32] : (c >= 0xC0 && c <= 0xDE ? 700 : 556);
+  }
+  return (w * size / 1000) * (grassetto ? 1.07 : 1);
+}
+
+function spezzaTesto(t, max, size, grassetto, maxRighe = 12) {
+  const righe = [];
+  for (const par of String(t).split(/\r?\n/)) {
+    let riga = '';
+    for (const parola of par.split(/\s+/).filter(Boolean)) {
+      const prova = riga ? riga + ' ' + parola : parola;
+      if (larghezzaTesto(prova, size, grassetto) <= max) { riga = prova; continue; }
+      if (riga) { righe.push(riga); riga = ''; }
+      let pezzo = '';
+      for (const ch of parola) {
+        if (pezzo && larghezzaTesto(pezzo + ch, size, grassetto) > max) { righe.push(pezzo); pezzo = ''; }
+        pezzo += ch;
+      }
+      riga = pezzo;
+    }
+    righe.push(riga);
+  }
+  if (righe.length > maxRighe) { righe.length = maxRighe; righe[maxRighe - 1] += '…'; }
+  return righe.length ? righe : [''];
+}
+
+const PDF_SPECIALI = { '€': 0x80, '…': 0x85, '‘': 0x91, '’': 0x92, '“': 0x93, '”': 0x94, '•': 0x95, '–': 0x96, '—': 0x97, '−': 0x2D, ' ': 0x20 };
+function pdfTesto(t) {
+  let out = '';
+  for (const ch of String(t)) {
+    const c = ch.codePointAt(0);
+    const b = PDF_SPECIALI[ch] !== undefined ? PDF_SPECIALI[ch] : (c < 256 ? c : 0x3F);
+    out += String.fromCharCode(b);
+  }
+  return out.replace(/[\\()]/g, m => '\\' + m).replace(/[\r\n]/g, ' ');
+}
+
+/* colonne: [{ t, w, a: 'l' | 'r' }]; gruppi: [{ titolo, righe: [[celle]], totale?: { colonna, testo } }] */
+function costruisciPdf({ titolo, intestazioni, colonne, gruppi }) {
+  const W = 842, H = 595, M = 36, FONT = 8, LEAD = 10, PAD = 3, BASSO = M + 14;
+  const num = n => n.toFixed(2);
+  const pagine = [];
+  let cmd, y;
+  const testo = (x, yy, size, str, { grassetto = false, colore = '0 g' } = {}) =>
+    cmd.push(`${colore} BT /F${grassetto ? 2 : 1} ${size} Tf ${num(x)} ${num(yy)} Td (${pdfTesto(str)}) Tj ET`);
+  const rettangolo = (x, yy, w, hh, colore) => cmd.push(`${colore} rg ${num(x)} ${num(yy)} ${num(w)} ${num(hh)} re f`);
+  const linea = (x1, y1, x2, y2) => cmd.push(`0.78 G 0.4 w ${num(x1)} ${num(y1)} m ${num(x2)} ${num(y2)} l S`);
+  const xColonne = []; { let x = M; colonne.forEach(c => { xColonne.push(x); x += c.w; }); }
+  const larghTot = colonne.reduce((t, c) => t + c.w, 0);
+
+  const intestazioneTabella = () => {
+    rettangolo(M, y - 14, larghTot, 14, '0.08 0.52 0.50');
+    colonne.forEach((c, i) => {
+      const x = c.a === 'r' ? xColonne[i] + c.w - PAD - larghezzaTesto(c.t, FONT, true) : xColonne[i] + PAD;
+      testo(x, y - 10, FONT, c.t, { grassetto: true, colore: '1 g' });
+    });
+    y -= 14;
+  };
+  const nuovaPagina = prima => {
+    cmd = []; pagine.push(cmd); y = H - M;
+    if (prima) {
+      testo(M, y - 14, 16, titolo, { grassetto: true }); y -= 22;
+      intestazioni.forEach(r => { spezzaTesto(r, larghTot, 9, false, 3).forEach(l => { testo(M, y - 9, 9, l, { colore: '0.3 g' }); y -= 12; }); });
+      y -= 8;
+    } else {
+      testo(M, y - 8, 8, titolo, { grassetto: true, colore: '0.3 g' }); y -= 16;
+    }
+    intestazioneTabella();
+  };
+
+  nuovaPagina(true);
+  for (const g of gruppi) {
+    if (y - 70 < BASSO) nuovaPagina(false);
+    y -= 6;
+    rettangolo(M, y - 15, larghTot, 15, '0.88 0.94 0.94');
+    testo(M + PAD, y - 11, 9, `${g.titolo} (${g.righe.length})`, { grassetto: true });
+    y -= 15;
+    for (const r of g.righe) {
+      const celle = r.map((t, i) => spezzaTesto(t, colonne[i].w - 2 * PAD, FONT, false));
+      const alto = Math.max(...celle.map(c => c.length)) * LEAD + 2 * PAD;
+      if (y - alto < BASSO) nuovaPagina(false);
+      celle.forEach((linee, i) => linee.forEach((l, k) => {
+        const x = colonne[i].a === 'r' ? xColonne[i] + colonne[i].w - PAD - larghezzaTesto(l, FONT, false) : xColonne[i] + PAD;
+        testo(x, y - PAD - 7 - k * LEAD, FONT, l);
+      }));
+      y -= alto;
+      linea(M, y, M + larghTot, y);
+    }
+    if (g.totale) {
+      if (y - 16 < BASSO) nuovaPagina(false);
+      const i = g.totale.colonna;
+      const t = g.totale.testo;
+      testo(xColonne[i - 1] + colonne[i - 1].w - PAD - larghezzaTesto('Totale', FONT, true), y - 11, FONT, 'Totale', { grassetto: true });
+      testo(xColonne[i] + colonne[i].w - PAD - larghezzaTesto(t, FONT, true), y - 11, FONT, t, { grassetto: true });
+      y -= 16;
+    }
+  }
+  pagine.forEach((c, n) => {
+    cmd = c;
+    testo(M, 20, 7, 'CasaManager', { colore: '0.45 g' });
+    const p = `Pagina ${n + 1} di ${pagine.length}`;
+    testo(W - M - larghezzaTesto(p, 7, false), 20, 7, p, { colore: '0.45 g' });
+  });
+
+  // ----- struttura del file PDF -----
+  const oggetti = [];
+  oggetti[1] = '<< /Type /Catalog /Pages 2 0 R >>';
+  oggetti[2] = `<< /Type /Pages /Kids [${pagine.map((_, i) => `${5 + 2 * i} 0 R`).join(' ')}] /Count ${pagine.length} >>`;
+  oggetti[3] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
+  oggetti[4] = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
+  pagine.forEach((c, i) => {
+    const contenuto = c.join('\n');
+    oggetti[5 + 2 * i] = `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${6 + 2 * i} 0 R >>`;
+    oggetti[6 + 2 * i] = `<< /Length ${contenuto.length} >>\nstream\n${contenuto}\nendstream`;
+  });
+  const infoN = 5 + 2 * pagine.length;
+  oggetti[infoN] = '<< /Title (CasaManager - Report) /Creator (CasaManager) /Producer (CasaManager) >>';
+  let out = '%PDF-1.4\n%âãÏÓ\n';
+  const offset = [];
+  for (let i = 1; i <= infoN; i++) { offset[i] = out.length; out += `${i} 0 obj\n${oggetti[i]}\nendobj\n`; }
+  const xref = out.length;
+  out += `xref\n0 ${infoN + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= infoN; i++) out += String(offset[i]).padStart(10, '0') + ' 00000 n \n';
+  out += `trailer\n<< /Size ${infoN + 1} /Root 1 0 R /Info ${infoN} 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  const byte = new Uint8Array(out.length);
+  for (let i = 0; i < out.length; i++) byte[i] = out.charCodeAt(i) & 255;
+  return byte;
+}
+
+function costruisciPdfReport(tipi, filtro) {
+  const dati = datiReport(tipi, filtro);
+  const nomi = TIPI_REPORT.filter(t => tipi.includes(t[0])).map(t => t[1]);
+  const gruppi = [];
+  TIPI_REPORT.forEach(([chiave, nome]) => {
+    const righe = dati.filter(r => r.chiave === chiave);
+    if (!righe.length) return;
+    const conImporto = righe.some(r => r.importo != null);
+    gruppi.push({
+      titolo: nome,
+      righe: righe.map(r => [giornoCsv(r.data), r.mese ? fmtMese(r.mese) : '', r.immobile, r.affittuario, [['depositi', 'bollette'].includes(chiave) ? r.tipologia : '', r.descrizione, r.note].filter(Boolean).join(' - '),
+        r.importo != null ? eur(r.importo) : '', r.stato]),
+      totale: conImporto ? { colonna: 5, testo: eur(righe.reduce((t, r) => t + (r.importo || 0), 0)) } : null
+    });
+  });
+  return costruisciPdf({
+    titolo: 'CasaManager – Report dei dati',
+    intestazioni: [
+      'Voci: ' + (nomi.length === TIPI_REPORT.length ? 'tutte' : nomi.join(', ')),
+      `Anno: ${filtro && filtro.anno ? filtro.anno : 'tutti'}  ·  Immobili: ${filtro && filtro.immobili && filtro.immobili.length ? filtro.immobili.map(nomeImmobile).join(', ') : 'tutti'}  ·  Creato il ${giornoCsv(oggi())}`
+    ],
+    colonne: [{ t: 'Data', w: 56 }, { t: 'Mese', w: 66 }, { t: 'Immobile', w: 100 }, { t: 'Affittuario', w: 90 }, { t: 'Descrizione / note', w: 300 },
+      { t: 'Importo', w: 68, a: 'r' }, { t: 'Stato', w: 90 }],
+    gruppi
+  });
 }
 
 function apriReport() {
   const scelti = new Set(TIPI_REPORT.map(t => t[0]));
   const corpo = h('div', { class: 'vista' });
+  const filtro = () => ({ anno: stato.annoReport, immobili: immobiliSelezionati('immReport') });
   const disegna = () => {
-    const n = righeReport([...scelti]).length;
-    const tutti = scelti.size === TIPI_REPORT.length;
+    const tutte = TIPI_REPORT.map(t => t[0]);
+    const anni = [...new Set([new Date().getFullYear().toString(), ...datiReport(tutte).map(r => r.anno).filter(Boolean)])].sort().reverse();
+    const selAnno = h('select', { 'aria-label': 'Anno', onchange: e => { stato.annoReport = e.target.value; disegna(); } },
+      h('option', { value: '' }, 'Tutti gli anni'), anni.map(a => h('option', { value: a }, a)));
+    selAnno.value = stato.annoReport;
+    const n = datiReport([...scelti], filtro()).length;
+    const tuttiScelti = scelti.size === TIPI_REPORT.length;
     corpo.replaceChildren(
-      h('div', { class: 'gruppo' }, TIPI_REPORT.map(([k, t]) => h('label', { class: 'riga-sel' }, h('span', {}, t),
-        h('input', { type: 'checkbox', class: 'interruttore', role: 'switch', checked: scelti.has(k), onchange: e => { if (e.target.checked) scelti.add(k); else scelti.delete(k); disegna(); } })))),
-      h('button', { class: 'link', onclick: () => { if (tutti) scelti.clear(); else TIPI_REPORT.forEach(t => scelti.add(t[0])); disegna(); } }, tutti ? 'Deseleziona tutto' : 'Seleziona tutto'),
+      h('div', { class: 'sezione' }, h('h2', {}, 'Filtri'), h('div', { class: 'gruppo' },
+        h('label', { class: 'riga-sel' }, h('span', {}, 'Anno'), selAnno),
+        h('button', { class: 'riga-sel', onclick: () => apriSelezioneImmobili('immReport', disegna) }, h('span', {}, 'Immobili'), h('span', { class: 'grigio' }, testoSelezione('immReport') + ' ›')))),
+      h('div', { class: 'sezione' }, h('h2', {}, 'Voci da includere'), h('div', { class: 'gruppo' }, TIPI_REPORT.map(([k, t]) => h('label', { class: 'riga-sel' }, h('span', {}, t),
+        h('input', { type: 'checkbox', class: 'interruttore', role: 'switch', checked: scelti.has(k), onchange: e => { if (e.target.checked) scelti.add(k); else scelti.delete(k); disegna(); } }))))),
+      h('button', { class: 'link', onclick: () => { if (tuttiScelti) scelti.clear(); else TIPI_REPORT.forEach(t => scelti.add(t[0])); disegna(); } }, tuttiScelti ? 'Deseleziona tutto' : 'Seleziona tutto'),
       h('p', { class: 'nota' }, n === 1 ? '1 riga nel report' : `${n} righe nel report`),
-      h('button', { class: 'btn primario pieno', disabled: n === 0, onclick: () => condividiFile(`CasaManager-report-${oggi()}.csv`, 'text/csv', costruisciCsv([...scelti])) }, 'Crea il report (file CSV)'),
-      h('p', { class: 'nota' }, 'Il file si apre con Numbers, Excel o Fogli Google, e contiene tutte le registrazioni delle tipologie scelte, in ordine di tipologia e di data.'));
+      h('button', { class: 'btn primario pieno', disabled: n === 0, onclick: () => condividiFile(`CasaManager-report-${oggi()}.pdf`, 'application/pdf', costruisciPdfReport([...scelti], filtro())) }, 'Crea il report (file PDF)'),
+      h('button', { class: 'btn secondario pieno', disabled: n === 0, onclick: () => condividiFile(`CasaManager-report-${oggi()}.csv`, 'text/csv', costruisciCsv([...scelti], filtro())) }, 'Crea il report (file CSV)'),
+      h('p', { class: 'nota' }, 'Il PDF è pronto da leggere o stampare, con i totali per voce. Il CSV si apre con Numbers, Excel o Fogli Google. Entrambi usano gli stessi filtri.'));
   };
   apriFoglio('Report dei dati', corpo, { sinistra: 'Chiudi' });
   disegna();
@@ -1143,11 +1327,15 @@ function vistaRegistro() {
       && (!parole.length || parole.every(p => testoRicerca(v).includes(p))));
     if (!tutte.length) { lista.replaceChildren(vuotoMsg('Registro vuoto', 'Tocca ＋ per registrare affitti, quote condominio, spese straordinarie o tasse.')); return; }
     if (!voci.length) { lista.replaceChildren(vuotoMsg('Nessun risultato', 'Prova con altre parole.')); return; }
+    // Anno e mese di competenza (il più recente in alto); nel mese, immobili in ordine alfabetico.
     const perMese = {};
-    voci.forEach(v => { (perMese[v.data.slice(0, 7)] = perMese[v.data.slice(0, 7)] || []).push(v); });
+    const competenza = v => v.competenza || v.data.slice(0, 7);
+    voci.forEach(v => { (perMese[competenza(v)] = perMese[competenza(v)] || []).push(v); });
+    const confronta = (a, b) => nomeImmobile(a.immobileId).localeCompare(nomeImmobile(b.immobileId), 'it', { sensitivity: 'base' })
+      || b.data.localeCompare(a.data) || a.titolo.localeCompare(b.titolo, 'it');
     lista.replaceChildren(...Object.keys(perMese).sort().reverse().map(m =>
       h('div', { class: 'sezione' }, h('h2', {}, fmtMese(m)),
-        h('div', { class: 'gruppo' }, perMese[m].sort((a, b) => b.data.localeCompare(a.data)).map(rigaRegistro)))));
+        h('div', { class: 'gruppo' }, perMese[m].sort(confronta).map(rigaRegistro)))));
   };
   const filtri = h('div', { class: 'segmenti' }, [['tutti', 'Tutti'], ['entrate', 'Entrate'], ['uscite', 'Uscite'], ['condominio', 'Condominio'], ['depositi', 'Depositi']].map(([k, t]) =>
     h('button', { class: stato.filtro === k ? 'attivo' : '', onclick: e => {
@@ -1196,38 +1384,38 @@ function grafico(punti) {
     svg('text', { x: 0, y: 10, 'font-size': 10, fill: 'var(--sub)' }, eur(max)), ...barre);
 }
 
-/* Immobili scelti nel bilancio: elenco vuoto = tutti. */
-function immobiliSelezionati() {
-  const validi = stato.immBilancio.filter(id => immobile(id));
+/* Immobili scelti (bilancio o report): elenco vuoto = tutti. */
+function immobiliSelezionati(chiave = 'immBilancio') {
+  const validi = stato[chiave].filter(id => immobile(id));
   return validi.length && validi.length < db.immobili.length ? validi : [];
 }
 
-function testoSelezione() {
-  const sel = immobiliSelezionati();
+function testoSelezione(chiave = 'immBilancio') {
+  const sel = immobiliSelezionati(chiave);
   if (!sel.length) return 'Tutti gli immobili';
   return sel.length === 1 ? nomeImmobile(sel[0]) : `${sel.length} immobili selezionati`;
 }
 
-function apriSelezioneImmobili() {
+function apriSelezioneImmobili(chiave = 'immBilancio', dopo = null) {
   const corpo = h('div', { class: 'vista' });
   const disegna = () => {
-    const sel = immobiliSelezionati();
+    const sel = immobiliSelezionati(chiave);
     const tutti = sel.length === 0;
     corpo.replaceChildren(
       h('div', { class: 'gruppo' },
-        h('button', { class: 'riga-sel tutti', onclick: () => { stato.immBilancio = []; disegna(); } },
+        h('button', { class: 'riga-sel tutti', onclick: () => { stato[chiave] = []; disegna(); } },
           h('span', {}, 'Tutti gli immobili'), h('span', { class: 'spunta' }, tutti ? '✓' : '')),
         opzImmobili().map(o => h('label', { class: 'riga-sel' }, h('span', {}, o.l),
           h('input', { type: 'checkbox', class: 'interruttore', role: 'switch', checked: tutti || sel.includes(o.v), onchange: e => {
             const corrente = tutti ? opzImmobili().map(x => x.v) : sel.slice();
             const nuovo = e.target.checked ? [...new Set([...corrente, o.v])] : corrente.filter(x => x !== o.v);
             if (!nuovo.length) avviso('Seleziona almeno un immobile.');
-            else stato.immBilancio = nuovo.length === db.immobili.length ? [] : nuovo;
+            else stato[chiave] = nuovo.length === db.immobili.length ? [] : nuovo;
             disegna();
           } })))),
-      h('p', { class: 'nota' }, 'Puoi scegliere uno, più immobili o tutti: il bilancio mostra la somma di quelli selezionati.'));
+      h('p', { class: 'nota' }, 'Puoi scegliere uno, più immobili o tutti.'));
   };
-  apriFoglio('Immobili del bilancio', corpo, { sinistra: 'Fine' });
+  apriFoglio('Immobili', corpo, { sinistra: 'Fine', alChiudere: dopo });
   disegna();
 }
 
@@ -1256,7 +1444,7 @@ function vistaBilancio() {
   const selAnno = h('select', { 'aria-label': 'Anno', onchange: e => { stato.anno = Number(e.target.value); render(); } },
     [...anni].sort((a, b) => b - a).map(a => h('option', { value: a }, a)));
   selAnno.value = stato.anno;
-  const selettore = h('button', { class: 'selettore', 'aria-label': 'Immobili', onclick: apriSelezioneImmobili },
+  const selettore = h('button', { class: 'selettore', 'aria-label': 'Immobili', onclick: () => apriSelezioneImmobili() },
     h('span', {}, testoSelezione()), h('span', { class: 'grigio' }, '›'));
 
   const righe = cats => h('div', { class: 'gruppo' }, cats.map(c => h('div', { class: 'voce-tot' }, h('span', {}, CATEGORIE[c]), h('span', {}, eur(somma(c))))));
@@ -1310,6 +1498,7 @@ function vistaImmobili() {
       h('button', { class: 'link', onclick: esportaCopia }, 'Salva una copia dei dati'),
       h('button', { class: 'link', onclick: () => file.click() }, 'Ripristina da una copia'))),
     h('p', { class: 'nota' }, 'I dati sono salvati solo su questo dispositivo. Salva una copia ogni tanto (es. nell\'app File o su iCloud Drive) per non perderli.'), file);
+  nodo.append(h('p', { class: 'nota', style: 'text-align:center' }, 'CasaManager · versione ' + VERSIONE));
   return { titolo: 'Immobili', azioni: [h('button', { 'aria-label': 'Nuovo immobile', onclick: () => moduloImmobile() }, '＋')], nodo };
 }
 

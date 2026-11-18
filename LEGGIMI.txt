@@ -48,9 +48,21 @@ FUNZIONI
   controllo attivo, dal mese scelto) e quote condominio ricevute ma non versate. Compare come avviso in Scadenze, si apre da solo alla
   prima apertura di ogni mese e il Calendario ricorda ogni 1° del mese di controllare (evento incluso in "Aggiungi gli avvisi al Calendario").
   Il controllo parte dal mese in cui si installa questa versione, senza segnalare arretrati.
-- Report: in Bilancio > Report scegli le tipologie di dati e crea un file CSV (si apre con Numbers, Excel, Fogli Google).
+- Registro: le voci sono ordinate per mese di competenza (il piu' recente in alto) e, nello stesso mese, per immobile in ordine alfabetico.
+- Report: in Bilancio > Report scegli anno, immobili (uno, piu' o tutti) e voci da includere, poi crea:
+  * un file PDF (A4 orizzontale, con totali per voce, pronto da leggere o stampare);
+  * oppure un file CSV (si apre con Numbers, Excel, Fogli Google). I filtri sono gli stessi.
   Spese, tasse e bollette contano come costo solo quando sono segnate "Pagata" (rata per rata).
   Affitti e quote condominio (ricevuti o versati) contano alla data di incasso/pagamento.
+
+AGGIORNARE L'APP (versione 2026.11.18 e successive) - SENZA CREARE ALTRE CARTELLE
+   Tieni sul telefono UNA sola cartella "CasaManager" (in File > Sul mio iPhone) e cancella le vecchie cartelle e zip estratti,
+   compreso il vecchio progetto Swift "CasaManager" se ancora presente: non serve piu'.
+   Per aggiornare: apri la tua pagina GitHub del repository > file da sostituire > "Add file > Upload files" e carica SOLO
+   i file che cambiano: index.html, style.css, app.js, sw.js, LEGGIMI.txt. Le icone e il manifest non cambiano mai.
+   Poi "Commit changes", attendi un minuto e riapri l'app dalla Home (se vedi ancora la versione vecchia, chiudila
+   e riaprila due volte). La versione installata e' scritta in fondo alla pagina Immobili.
+   I tuoi dati non si perdono negli aggiornamenti.
 
 PROVA SUL COMPUTER (facoltativa)
    In questa cartella:  python3 -m http.server 8000   poi apri http://localhost:8000

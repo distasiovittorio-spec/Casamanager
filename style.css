@@ -182,3 +182,6 @@ main { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 12
 .allerta .ico { font-size: 22px; }
 .segmenti { overflow-x: auto; }
 .segmenti button { white-space: nowrap; padding: 7px 8px; font-size: 13px; }
+
+.riga-sel select { border: 0; background: none; color: var(--accento); font-size: 16px; text-align: right; text-align-last: right; max-width: 60%; }
+.riga-sel select:focus { outline: none; }
