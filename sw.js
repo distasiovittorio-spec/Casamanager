@@ -1,5 +1,5 @@
 /* CasaManager - service worker: funziona offline, aggiorna quando c'è rete (network-first). */
-const CACHE = 'casamanager-v6';
+const CACHE = 'casamanager-v7';
 const FILE = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest',
   'icons/icon-192.png', 'icons/icon-512.png', 'icons/apple-touch-icon.png'];
 

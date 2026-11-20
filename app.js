@@ -4,16 +4,18 @@
 
 /* =================== Dati =================== */
 
-const VERSIONE = '2026.11.18';
+const VERSIONE = '2026.11.20';
 const CHIAVE = 'casamanager.dati.v1';
-const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'spese', 'rate', 'tasse', 'bollette', 'causali', 'riunioni', 'letture'];
+const TABELLE = ['immobili', 'affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'spese', 'rate', 'tasse', 'bollette', 'causali', 'riunioni', 'letture', 'entrateAltre', 'causaliEntrate'];
 const CAUSALI_BASE = ['Prima rata IMU', 'Seconda rata IMU', 'Saldo IMU', 'TARI', 'Imposta di registro', 'Cedolare secca'];
+const CAUSALI_ENTRATE_BASE = ['Rimborso tasse', 'Rimborso assicurazione', 'Rimborso spese condominiali'];
 const nuovoId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
 function vuoto() {
   const d = { versione: 1 };
   TABELLE.forEach(t => { d[t] = []; });
   d.causali = CAUSALI_BASE.map((testo, i) => ({ id: 'base' + i, testo }));
+  d.causaliEntrate = CAUSALI_ENTRATE_BASE.map((testo, i) => ({ id: 'ent' + i, testo }));
   return d;
 }
 
@@ -142,7 +144,7 @@ const speseRate = spesaId => db.rate.filter(r => r.spesaId === spesaId).sort((a,
 
 function eliminaImmobile(id) {
   db.immobili = db.immobili.filter(x => x.id !== id);
-  ['affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'tasse', 'bollette', 'riunioni', 'letture'].forEach(t => {
+  ['affittuari', 'affitti', 'condomini', 'affittiVersati', 'condominiVersati', 'depositi', 'tasse', 'bollette', 'riunioni', 'letture', 'entrateAltre'].forEach(t => {
     db[t] = db[t].filter(x => x.immobileId !== id);
   });
   const spese = db.spese.filter(s => s.immobileId === id).map(s => s.id);
@@ -270,6 +272,10 @@ function vociRegistro() {
     voci.push({ k: 'spesa', id: s.id, immobileId: s.immobileId, gruppo: 'uscita', entrata: false, data: s.data, importo: s.totale, icona: '🔨', categoria: 'Spesa straordinaria',
       titolo: s.descrizione, dettaglio: nomeImmobile(s.immobileId), stato });
   }
+  for (const e of db.entrateAltre) {
+    voci.push({ k: 'entrataAltra', id: e.id, immobileId: e.immobileId, gruppo: 'entrata', entrata: true, data: e.data, importo: e.importo, icona: '💶', categoria: 'Altra entrata',
+      titolo: e.causale, dettaglio: nomeImmobile(e.immobileId) });
+  }
   for (const b of db.bollette) {
     voci.push({ k: 'bolletta', id: b.id, immobileId: b.immobileId, gruppo: 'uscita', entrata: false, data: b.pagata ? (b.dataPagamento || b.scadenza) : b.scadenza, importo: b.importo,
       icona: ICONE_BOLLETTE[b.tipo] || '🧾', categoria: 'Bolletta ' + b.tipo, titolo: titoloBolletta(b), dettaglio: nomeImmobile(b.immobileId),
@@ -299,6 +305,7 @@ function movimentiEffettivi() {
   // Depositi chiusi: conta solo la parte trattenuta (entrata se incassato, costo se versato), alla data di chiusura.
   db.depositi.filter(d => d.chiusura && d.chiusura.trattenuto > 0.004).forEach(d => m.push({ data: d.chiusura.data, importo: d.chiusura.trattenuto,
     cat: d.tipo === 'incassato' ? 'cauzioneTrattenuta' : 'cauzioneNonRestituita', immobileId: d.immobileId }));
+  db.entrateAltre.forEach(e => m.push({ data: e.data, importo: e.importo, cat: 'altreEntrate', immobileId: e.immobileId }));
   db.rate.filter(r => r.pagata).forEach(r => {
     const s = db.spese.find(x => x.id === r.spesaId);
     m.push({ data: r.dataPagamento || r.scadenza, importo: r.importo, cat: 'spese', immobileId: s ? s.immobileId : '' });
@@ -841,6 +848,52 @@ function moduloCausale(esistente) {
   });
 }
 
+const causaliEntrateOrdinate = () => db.causaliEntrate.slice().sort((a, b) => a.testo.localeCompare(b.testo, 'it'));
+
+function moduloEntrataAltra(esistente) {
+  let causale = '', altro = '';
+  if (esistente) {
+    if (db.causaliEntrate.some(c => c.testo === esistente.causale)) causale = esistente.causale;
+    else { causale = ALTRO; altro = esistente.causale; }
+  }
+  const testo = v => (v.causale === ALTRO ? v.altro.trim() : v.causale);
+  apriModulo({
+    titolo: esistente ? 'Modifica entrata' : 'Altra entrata',
+    valori: { causale, altro, immobileId: esistente ? esistente.immobileId : immobilePredefinito(), data: esistente ? esistente.data : oggi(),
+      importo: esistente ? testoImporto(esistente.importo) : '', id: esistente && esistente.id },
+    campi: [
+      { n: 'causale', l: 'Causale', t: 'scelta', vuoto: 'Seleziona…', opts: () => [...causaliEntrateOrdinate().map(c => ({ v: c.testo, l: c.testo })), { v: ALTRO, l: 'Altra descrizione…' }] },
+      { n: 'altro', l: 'Descrizione', t: 'testo', ph: 'es. Rimborso conguaglio', show: v => v.causale === ALTRO },
+      { n: 'immobileId', l: 'Immobile', t: 'scelta', opts: opzImmobili },
+      { n: 'data', l: 'Data incasso', t: 'data' },
+      { n: 'importo', l: 'Importo', t: 'importo' }
+    ],
+    info: () => 'Viene conteggiata come entrata nel bilancio, alla data di incasso.',
+    valido: v => v.immobileId && testo(v) && v.data && (leggiImporto(v.importo) || 0) > 0,
+    salva: v => {
+      const dati = { immobileId: v.immobileId, causale: testo(v), data: v.data, importo: leggiImporto(v.importo) };
+      if (esistente) Object.assign(esistente, dati); else db.entrateAltre.push(Object.assign({ id: nuovoId() }, dati));
+    },
+    elimina: esistente ? () => { db.entrateAltre = db.entrateAltre.filter(x => x.id !== esistente.id); salva(); } : null,
+    conferma: 'Eliminare questa entrata dal registro?'
+  });
+}
+
+function moduloCausaleEntrata(esistente) {
+  apriModulo({
+    titolo: esistente ? 'Modifica causale' : 'Nuova causale',
+    valori: { testo: esistente ? esistente.testo : '', id: esistente && esistente.id },
+    campi: [{ n: 'testo', l: 'Causale', t: 'testo', ph: 'es. Rimborso tasse' }],
+    valido: v => v.testo.trim() !== '' && !db.causaliEntrate.some(c => c.id !== v.id && c.testo.toLowerCase() === v.testo.trim().toLowerCase()),
+    salva: v => {
+      if (esistente) esistente.testo = v.testo.trim(); else db.causaliEntrate.push({ id: nuovoId(), testo: v.testo.trim() });
+    },
+    elimina: esistente ? () => { db.causaliEntrate = db.causaliEntrate.filter(c => c.id !== esistente.id); salva(); } : null,
+    conferma: 'Eliminare questa causale? Le entrate già registrate non cambiano.',
+    etichettaElimina: 'Elimina causale'
+  });
+}
+
 function moduloLettura(esistente) {
   apriModulo({
     titolo: esistente ? 'Modifica promemoria' : 'Nuovo promemoria',
@@ -946,7 +999,7 @@ function importaCopia(file) {
 /* =================== Report =================== */
 
 const TIPI_REPORT = [['affitti', 'Affitti ricevuti'], ['affittiVersati', 'Affitti versati'], ['condomini', 'Quote condominio ricevute'],
-  ['condominiVersati', 'Quote condominio versate'], ['depositi', 'Depositi cauzionali'], ['spese', 'Spese straordinarie (rate)'], ['tasse', 'Tasse'], ['bollette', 'Bollette'],
+  ['condominiVersati', 'Quote condominio versate'], ['entrateAltre', 'Altre entrate'], ['depositi', 'Depositi cauzionali'], ['spese', 'Spese straordinarie (rate)'], ['tasse', 'Tasse'], ['bollette', 'Bollette'],
   ['affittuari', 'Affittuari e contratti'], ['riunioni', 'Riunioni di condominio']];
 
 const csvCella = x => { const t = String(x == null ? '' : x); return /[;"\n\r]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
@@ -966,6 +1019,7 @@ function datiReport(tipi, filtro) {
   if (tipi.includes('affittiVersati')) db.affittiVersati.forEach(a => aggiungi('affittiVersati', 'Affitto versato', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagato'));
   if (tipi.includes('condomini')) db.condomini.forEach(a => aggiungi('condomini', 'Quota condominio ricevuta', a.data, a.mese, a.immobileId, '', '', a.importo, 'Incassata'));
   if (tipi.includes('condominiVersati')) db.condominiVersati.forEach(a => aggiungi('condominiVersati', 'Quota condominio versata', a.data, a.mese, a.immobileId, '', '', a.importo, 'Pagata'));
+  if (tipi.includes('entrateAltre')) db.entrateAltre.forEach(e => aggiungi('entrateAltre', 'Altra entrata', e.data, '', e.immobileId, '', e.causale, e.importo, 'Incassata'));
   if (tipi.includes('depositi')) {
     db.depositi.forEach(d => {
       const c = d.chiusura;
@@ -1297,6 +1351,7 @@ function apriVoceRegistro(v) {
   else if (v.k === 'condominioVersato') moduloVersamento('condominio', db.condominiVersati.find(x => x.id === v.id));
   else if (v.k === 'deposito') { const d = db.depositi.find(x => x.id === v.id); moduloDeposito(d.tipo, d); }
   else if (v.k === 'bolletta') moduloBolletta(db.bollette.find(x => x.id === v.id));
+  else if (v.k === 'entrataAltra') moduloEntrataAltra(db.entrateAltre.find(x => x.id === v.id));
   else if (v.k === 'spesa') dettaglioSpesa(v.id);
   else moduloTassa(db.tasse.find(x => x.id === v.id));
 }
@@ -1352,7 +1407,7 @@ function menuRegistra() {
   const scelte = [['🏠', 'Affitto ricevuto', () => moduloAffitto()], ['🏢', 'Quota condominio ricevuta', () => moduloCondominio()],
     ['🏠', 'Affitto versato', () => moduloVersamento('affitto')], ['🏢', 'Quota condominio versata', () => moduloVersamento('condominio')],
     ['🔑', 'Deposito cauzionale versato', () => moduloDeposito('versato')], ['🔑', 'Deposito cauzionale incassato', () => moduloDeposito('incassato')],
-    ['💡', 'Bolletta (acqua, luce, gas, telefono)', () => moduloBolletta()], ['🔨', 'Spesa straordinaria', moduloSpesa], ['🏛️', 'Tassa', () => moduloTassa()]];
+    ['💡', 'Bolletta (acqua, luce, gas, telefono)', () => moduloBolletta()], ['💶', 'Altra entrata (rimborso…)', () => moduloEntrataAltra()], ['🔨', 'Spesa straordinaria', moduloSpesa], ['🏛️', 'Tassa', () => moduloTassa()]];
   const corpo = h('div', { class: 'gruppo' }, scelte.map(([i, t, f]) =>
     h('button', { class: 'scelta-voce', onclick: () => { velo.chiudi(); f(); } }, h('span', {}, i), t)));
   const velo = apriFoglio('Registra', corpo, { sinistra: 'Chiudi' });
@@ -1360,8 +1415,8 @@ function menuRegistra() {
 
 const CATEGORIE = { affitti: 'Affitti ricevuti', cauzioneTrattenuta: 'Cauzioni trattenute', affittoVersato: 'Affitto versato',
   cauzioneNonRestituita: 'Cauzioni non restituite', spese: 'Spese straordinarie', tasse: 'Tasse', bollette: 'Bollette',
-  condominio: 'Quote condominio ricevute', condominioVersato: 'Quote condominio versate' };
-const CAT_ENTRATE = ['affitti', 'cauzioneTrattenuta'];
+  altreEntrate: 'Altre entrate (rimborsi…)', condominio: 'Quote condominio ricevute', condominioVersato: 'Quote condominio versate' };
+const CAT_ENTRATE = ['affitti', 'altreEntrate', 'cauzioneTrattenuta'];
 const CAT_USCITE = ['affittoVersato', 'cauzioneNonRestituita', 'spese', 'tasse', 'bollette'];
 
 function grafico(punti) {
@@ -1492,6 +1547,12 @@ function vistaImmobili() {
         h('div', { class: 'testi' }, h('div', { class: 't1' }, c.testo))))),
       h('button', { class: 'link', onclick: () => moduloCausale() }, '＋ Aggiungi causale')),
     h('p', { class: 'nota' }, 'Nel modulo della tassa scegli la causale e aggiungi solo l\'anno: es. "Prima rata IMU" + 2026 = "Prima rata IMU 2026".')));
+  nodo.append(h('div', { class: 'sezione' }, h('h2', {}, 'Causali delle altre entrate'),
+    h('div', { class: 'gruppo' },
+      causaliEntrateOrdinate().map(c => h('div', { class: 'riga' }, h('button', { class: 'riga-main', onclick: () => moduloCausaleEntrata(c) },
+        h('div', { class: 'testi' }, h('div', { class: 't1' }, c.testo))))),
+      h('button', { class: 'link', onclick: () => moduloCausaleEntrata() }, '＋ Aggiungi causale')),
+    h('p', { class: 'nota' }, 'Per rimborsi e altri incassi (es. rimborso tasse). Nel modulo puoi anche scrivere una descrizione libera.')));
   const file = h('input', { type: 'file', accept: 'application/json,.json', hidden: true, onchange: e => { if (e.target.files[0]) importaCopia(e.target.files[0]); e.target.value = ''; } });
   nodo.append(h('div', { class: 'sezione' }, h('h2', {}, 'Copia dei dati'),
     h('div', { class: 'gruppo' },

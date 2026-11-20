@@ -38,6 +38,8 @@ PRIVACY
 FUNZIONI
 - Immobili: elenco, affittuari con inizio/fine contratto, riunioni di condominio con note.
 - Registro: affitti ricevuti e versati, quote condominio ricevute e versate, depositi cauzionali versati e incassati, spese straordinarie (anche a rate), tasse, bollette (acqua, luce, gas, telefono). Con ricerca e filtro Entrate/Uscite.
+- Altre entrate (es. rimborso tasse): Registro > ＋ > "Altra entrata". Scegli una causale (modificabile in Immobili > Causali delle altre entrate)
+  o scrivi una descrizione libera. E' conteggiata come entrata nel bilancio e compare nel report.
 - Scadenze: promemoria ripetuti ogni N mesi (lettura gas, lettura acqua, pagare affitto), tasse, bollette e rate da pagare.
   Le tasse usano causali standard modificabili (Immobili > Causali delle tasse): scegli "Prima rata IMU", aggiungi l'anno e compare "Prima rata IMU 2026".
 - Bilancio: entrate e costi per anno e per uno, piu' o tutti gli immobili, con grafico mensile.
